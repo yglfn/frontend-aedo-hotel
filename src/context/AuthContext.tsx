@@ -1,0 +1,121 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { api } from '../lib/api';
+import type { Role } from '../types';
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: Role;
+  is_active: boolean;
+  current_shift?: any;
+}
+
+export interface HotelSettings {
+  hotel_name: string;
+  hotel_address: string;
+  hotel_phone?: string;
+  hotel_email?: string;
+  tax_percentage?: number;
+}
+
+interface AuthContextType {
+  user: AuthUser | null;
+  hotelSettings: HotelSettings;
+  isLoading: boolean;
+  isAdmin: boolean;
+  isPegawai: boolean;
+  setUser: (user: AuthUser | null) => void;
+  refreshUser: () => Promise<void>;
+  refreshSettings: () => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const defaultHotelSettings: HotelSettings = {
+  hotel_name: 'Aedo Hotel Syariah',
+  hotel_address: '',
+};
+
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  hotelSettings: defaultHotelSettings,
+  isLoading: true,
+  isAdmin: false,
+  isPegawai: false,
+  setUser: () => {},
+  refreshUser: async () => {},
+  refreshSettings: async () => {},
+  logout: async () => {},
+});
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [hotelSettings, setHotelSettings] = useState<HotelSettings>(defaultHotelSettings);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refreshSettings = async () => {
+    try {
+      const res = await api.get('/api/v1/settings');
+      if (res.data?.data) {
+        setHotelSettings({
+          hotel_name: res.data.data.hotel_name || 'Aedo Hotel Syariah',
+          hotel_address: res.data.data.hotel_address || '',
+          hotel_phone: res.data.data.hotel_phone || '',
+          hotel_email: res.data.data.hotel_email || '',
+          tax_percentage: Number(res.data.data.tax_percentage || 0),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load hotel settings', err);
+    }
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await api.get('/api/v1/auth/me');
+      if (res.data?.data) {
+        setUser(res.data.data);
+      } else {
+        setUser(null);
+      }
+    } catch (err: any) {
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshUser();
+    refreshSettings();
+  }, []);
+
+  const logout = async () => {
+    try {
+      await api.post('/api/v1/auth/logout');
+    } catch {}
+    setUser(null);
+    window.location.href = '/login';
+  };
+
+  const isAdmin = user?.role === 'admin' || (typeof user?.role === 'object' && (user?.role as any)?.value === 'admin');
+  const isPegawai = user?.role === 'pegawai' || (typeof user?.role === 'object' && (user?.role as any)?.value === 'pegawai');
+
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      hotelSettings, 
+      isLoading, 
+      isAdmin, 
+      isPegawai, 
+      setUser, 
+      refreshUser, 
+      refreshSettings, 
+      logout 
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);

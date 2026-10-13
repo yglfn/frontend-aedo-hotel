@@ -1,0 +1,57 @@
+.shortcut-tile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.shortcut-tile:hover {
+  background-color: var(--surface-muted);
+}
+
+.shortcut-tile:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.shortcut-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: var(--primary-50);
+  color: var(--primary-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.shortcut-icon-wrapper svg {
+  width: 20px;
+  height: 20px;
+}
+
+.shortcut-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcut-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-900);
+  line-height: 1.2;
+}
+
+.shortcut-subtitle {
+  font-size: 12px;
+  color: var(--ink-400);
+  margin-top: 4px;
+  line-height: 1.2;
+}

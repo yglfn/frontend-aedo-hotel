@@ -1,0 +1,35 @@
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.app-main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: 232px; /* sidebar width */
+  min-width: 0; /* Important to prevent flex children from overflowing */
+}
+
+.app-content {
+  flex: 1;
+  padding: 24px;
+  overflow-x: hidden;
+}
+
+.app-content-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .app-main-wrapper {
+    margin-left: 0;
+  }
+  .app-content {
+    padding: 16px;
+  }
+  /* On mobile, sidebar will likely be a drawer, not handled here yet */
+}

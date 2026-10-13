@@ -1,0 +1,78 @@
+.task-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 120ms ease;
+}
+
+.task-card:hover {
+  box-shadow: var(--shadow-card);
+}
+
+.task-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-room-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.priority-badge {
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.task-notes {
+  font-size: 13px;
+  color: var(--ink-700);
+  line-height: 1.5;
+}
+
+.task-actions {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.w-full {
+  width: 100%;
+}
+
+.mr-2 {
+  margin-right: 8px;
+}
+
+.task-completed-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--success-fg);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+/* Status specific styling */
+.task-card.status-in_progress {
+  border-color: var(--primary-300);
+  background-color: var(--primary-50);
+}
+
+.task-card.status-completed {
+  opacity: 0.7;
+}

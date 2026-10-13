@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background-color: var(--bg-app);
+  color: var(--ink-700);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--ink-900);
+  margin-bottom: 0.5em;
+}
+
+/* Typography Scale */
+.text-display {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 700;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-h1 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.text-h2 {
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.text-h3 {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.text-body {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+  color: var(--ink-700);
+}
+
+.text-body-strong {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.text-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink-500);
+}
+
+.text-caption {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--ink-400);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Utilities */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* Focus */
+*:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

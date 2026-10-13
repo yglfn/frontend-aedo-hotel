@@ -1,0 +1,88 @@
+.booking-list-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.booking-filters {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.search-wrapper {
+  width: 100%;
+  max-width: 300px;
+}
+
+.booking-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.detail-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--surface-muted);
+  padding: 16px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+}
+
+.detail-code {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 16px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.invoice-summary {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invoice-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-700);
+}
+
+@media (max-width: 768px) {
+  .booking-filters {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .search-wrapper {
+    max-width: 100%;
+  }
+}

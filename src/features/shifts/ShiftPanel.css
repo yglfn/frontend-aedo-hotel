@@ -1,0 +1,47 @@
+.topbar-shift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 150ms ease;
+  background: none;
+  font-family: inherit;
+}
+
+.topbar-shift-badge.active {
+  background-color: var(--success-bg, #f0fdf4);
+  color: var(--success-fg, #166534);
+  border-color: var(--success-border, #bbf7d0);
+}
+
+.topbar-shift-badge.active:hover {
+  background-color: #dcfce7;
+}
+
+.topbar-shift-badge.inactive {
+  background-color: var(--danger-bg, #fef2f2);
+  color: var(--danger-fg, #991b1b);
+  border-color: var(--danger-border, #fecaca);
+}
+
+.topbar-shift-badge.inactive:hover {
+  background-color: #fee2e2;
+}
+
+.topbar-shift-badge.loading {
+  background-color: var(--surface-hover);
+  color: var(--ink-500);
+  cursor: not-allowed;
+}
+
+.shift-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
