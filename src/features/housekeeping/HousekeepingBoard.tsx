@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { TaskCard } from './TaskCard';
 import type { HousekeepingTask } from './TaskCard';
 import type { HousekeepingTaskStatus } from '../../types';
+import { toast } from '../../components/ui/Toast';
 import './HousekeepingBoard.css';
 
 export default function HousekeepingBoard() {
@@ -31,9 +32,17 @@ export default function HousekeepingBoard() {
     try {
       await api.patch(`/api/v1/housekeeping-tasks/${id}`, { status: newStatus });
       await fetchTasks();
+
+      toast.success(
+        newStatus === 'completed'
+          ? 'Tugas selesai. Status kamar sudah diperbarui ke tersedia.'
+          : newStatus === 'in_progress'
+            ? 'Tugas sedang dikerjakan.'
+            : 'Status tugas diperbarui.'
+      );
     } catch (error) {
       console.error('Failed to update task status', error);
-      alert('Gagal mengupdate status housekeeping ke backend.');
+      toast.apiError(error, 'Gagal mengupdate status housekeeping ke backend.');
     }
   };
 

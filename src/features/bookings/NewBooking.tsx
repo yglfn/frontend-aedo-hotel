@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { toast } from '../../components/ui/Toast';
 import { formatIDR } from '../../lib/format';
 import { api } from '../../lib/api';
+import { openMidtransPayment, hideMidtransOverlay, snapResultTransactionId, type SnapHandlers, type SnapOpenResult } from '../../lib/midtransSnap';
 import './NewBooking.css';
 
 interface AvailableRoom {
@@ -64,7 +66,31 @@ export default function NewBooking() {
   const [taxPercentage, setTaxPercentage] = useState<number>(11);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [paymentInfo, setPaymentInfo] = useState<{ channel: string; qr_string?: string; amount?: number } | null>(null);
+  const [paymentInfo, setPaymentInfo] = useState<{
+    channel: string;
+    qr_string?: string;
+    amount?: number;
+    redirect_url?: string;
+    environment?: string;
+    token?: string;
+    clientKey?: string;
+    snapJsUrl?: string;
+    paymentId?: number;
+  } | null>(null);
+
+  // Jalur yang berhasil dipakai membuka pembayaran + status terbaru dari gateway,
+  // supaya modal menampilkan keadaan sebenarnya, bukan sekadar "silakan scan".
+  const [autoOpen, setAutoOpen] = useState<SnapOpenResult | null>(null);
+  const [openError, setOpenError] = useState('');
+  const [gatewayState, setGatewayState] = useState<'pending' | 'verified' | 'expired'>('pending');
+  const pollRef = useRef<number | null>(null);
+  // Midtrans kadang mencatat settlement beberapa detik setelah tamu selesai, dan callback
+  // Snap JS bisa tidak datang (iframe-nya pindah ke domain bank simulator). Karena itu
+  // status ditanya ulang beberapa kali, bukan sekali saja.
+  const retryRef = useRef<number[]>([]);
+  const resolvedRef = useRef(false);
+  // transaction_id Midtrans yang sudah pernah diberitahukan (dipakai ulang oleh retry/poll)
+  const providerRefRef = useRef<string | null>(null);
 
   // Ambil pengaturan pajak hotel dari backend
   useEffect(() => {
@@ -134,7 +160,7 @@ export default function NewBooking() {
       setStep(2);
     } catch (error: any) {
       console.error('Failed to search rooms', error);
-      setSearchError(error.response?.data?.message || 'Gagal mencari ketersediaan kamar. Pastikan tanggal valid.');
+      setSearchError(error.response?.data?.message || 'Gagal mencari kamar. Periksa tanggalnya.');
     } finally {
       setIsSearchingRooms(false);
     }
@@ -191,19 +217,39 @@ export default function NewBooking() {
       const bookingRes = await api.post('/api/v1/bookings', payload);
       const createdBooking = bookingRes.data.data;
 
+      toast.success(
+        `Reservasi ${createdBooking?.booking_code || ''} berhasil dibuat.`,
+        { title: 'Reservasi Tersimpan' }
+      );
+
       if (paymentMethod !== 'pay_later' && createdBooking?.id) {
         try {
           const payRes = await api.post(`/api/v1/bookings/${createdBooking.id}/payments/gateway`, {
             channel: paymentMethod,
           });
           const info = payRes.data?.payment_info;
+          setGatewayState('pending');
+          setAutoOpen(null);
+          setOpenError('');
+          resolvedRef.current = false;
+          providerRefRef.current = null;
           setPaymentInfo({
             channel: paymentMethod,
             qr_string: info?.qr_string || info?.transaction_id,
+            redirect_url: info?.redirect_url || undefined,
+            environment: info?.environment || undefined,
             amount: info?.amount || estTotal,
+            token: info?.token || undefined,
+            clientKey: info?.client_key || undefined,
+            snapJsUrl: info?.snap_js_url || undefined,
+            paymentId: payRes.data?.data?.id || undefined,
           });
         } catch (payErr) {
           console.error('Payment gateway error, booking was still created', payErr);
+          toast.warning(
+            'Reservasi tersimpan, gateway gagal. Catat pembayaran di daftar reservasi.',
+            { title: 'Gateway Gagal' }
+          );
           navigate('/reservations');
         }
       } else {
@@ -211,13 +257,146 @@ export default function NewBooking() {
       }
     } catch (error: any) {
       console.error('Failed to submit booking', error);
-      setSubmitError(error.response?.data?.message || error.response?.data?.error || 'Gagal membuat reservasi.');
+      const detail = error.response?.data?.error || error.response?.data?.message;
+      setSubmitError(detail || 'Gagal membuat reservasi.');
+
+      if (error.response?.status === 409) {
+        setStep(2);
+        toast.error(String(detail), { title: 'Kamar Tidak Tersedia' });
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  /**
+   * Tanya status terbaru ke gateway.
+   */
+  const clearStatusRetries = useCallback(() => {
+    retryRef.current.forEach((id) => window.clearTimeout(id));
+    retryRef.current = [];
+  }, []);
+
+  const syncGatewayStatus = useCallback(async (providerRef?: string | null) => {
+    if (!paymentInfo?.paymentId || resolvedRef.current) return;
+
+    // transaction_id Midtrans yang baru saja diberitahukan Snap dipakai lagi oleh retry/poll
+    // berikutnya: untuk e-wallet hasil Snap, hanya id itulah yang dikenali API status mereka.
+    if (providerRef) providerRefRef.current = providerRef;
+    const reference = providerRef || providerRefRef.current;
+
+    try {
+      const res = await api.post(
+        `/api/v1/payments/${paymentInfo.paymentId}/sync`,
+        reference ? { transaction_id: reference } : {}
+      );
+
+      if (res.data?.payment_status === 'verified') {
+        resolvedRef.current = true;
+        setGatewayState('verified');
+
+        if (pollRef.current) {
+          window.clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+        clearStatusRetries();
+
+        toast.success('Pembayaran lunas dan reservasi terkonfirmasi.', { title: 'Pembayaran Berhasil' });
+      } else if (res.data?.gateway_status === 'expired') {
+        resolvedRef.current = true;
+        setGatewayState('expired');
+        clearStatusRetries();
+        toast.warning('Batas waktu pembayaran gateway kedaluwarsa.');
+      }
+    } catch (error) {
+      // Gagal sinkron (network dsb.) biarkan poller/retry mencoba lagi
+      console.error('Gateway status sync failed', error);
+    }
+  }, [paymentInfo?.paymentId, clearStatusRetries]);
+
+  /** Tanya status berkali-kali sebentar: settlement bisa tercatat setelah callback Snap */
+  const scheduleStatusRetries = useCallback(() => {
+    clearStatusRetries();
+
+    retryRef.current = [3000, 8000, 15000, 25000].map((delay) =>
+      window.setTimeout(() => void syncGatewayStatus(), delay)
+    );
+  }, [clearStatusRetries, syncGatewayStatus]);
+
+  const snapHandlers = useCallback((): SnapHandlers => ({
+    // Hasil Snap JS membawa transaction_id Midtrans -> langsung sinkron otomatis
+    onSuccess: (result) => { void syncGatewayStatus(snapResultTransactionId(result)); scheduleStatusRetries(); },
+    onPending: (result) => { void syncGatewayStatus(snapResultTransactionId(result)); scheduleStatusRetries(); },
+    onError: () => { void syncGatewayStatus(); scheduleStatusRetries(); },
+    onClose: () => { void syncGatewayStatus(); scheduleStatusRetries(); },
+  }), [syncGatewayStatus, scheduleStatusRetries]);
+
+  /** Buka (ulang) halaman pembayaran Midtrans; mengembalikan jalur yang berhasil dipakai */
+  const openPayment = useCallback(async (): Promise<SnapOpenResult | undefined> => {
+    if (!paymentInfo) return undefined;
+
+    setOpenError('');
+
+    let outcome;
+    try {
+      outcome = await openMidtransPayment(
+        {
+          token: paymentInfo.token,
+          client_key: paymentInfo.clientKey,
+          snap_js_url: paymentInfo.snapJsUrl,
+          redirect_url: paymentInfo.redirect_url,
+        },
+        snapHandlers()
+      );
+    } catch (error) {
+      // Jangan pernah kembali ke status "menyiapkan..." yang menggantung: tunjukkan alasannya
+      console.error('Unexpected failure while opening Midtrans payment', error);
+      setAutoOpen('nothing');
+      setOpenError('Gagal membuka pembayaran - tekan Bayar.');
+
+      return 'nothing';
+    }
+
+    setAutoOpen(outcome.result);
+    if (outcome.error) setOpenError(outcome.error);
+
+    if (outcome.result === 'blocked') {
+      toast.warning('Popup diblokir browser - tekan Bayar.', {
+        title: 'Popup Diblokir',
+      });
+    }
+
+    return outcome.result;
+  }, [paymentInfo, snapHandlers]);
+
+  useEffect(() => {
+    if (!paymentInfo) return;
+
+    // Muncul otomatis begitu kode bayar diterima — staf tidak perlu menekan link dulu
+    void openPayment();
+
+    // Jaring pengaman: cek berkala selama modal terbuka (notifikasi gateway belum tentu
+    // bisa masuk, misalnya aplikasi lokal tanpa HTTPS publik)
+    if (pollRef.current) window.clearInterval(pollRef.current);
+    pollRef.current = window.setInterval(() => void syncGatewayStatus(), 20000);
+
+    return () => {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      clearStatusRetries();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentInfo]);
+
   const handleClosePaymentModal = () => {
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    // Overlay Snap milik Midtrans menempel di document; jangan ditinggal saat pindah halaman
+    hideMidtransOverlay();
     setPaymentInfo(null);
     navigate('/reservations');
   };
@@ -440,12 +619,10 @@ export default function NewBooking() {
                 <label className="text-label">Metode Pembayaran (Otomatis DP/Lunas)</label>
                 <select className="ui-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
                   <option value="pay_later">Bayar Nanti (Pay at Hotel / Transfer Manual)</option>
-                  <option value="qris">Payment Gateway (QRIS)</option>
-                  <option value="va">Payment Gateway (Virtual Account)</option>
-                  <option value="ewallet">Payment Gateway (E-Wallet)</option>
+                  <option value="auto">Payment Gateway Midtrans (tamu pilih metodenya sendiri)</option>
                 </select>
                 <p className="text-body-small text-ink-500 mt-1">
-                  Pilih Gateway untuk langsung memunculkan kode bayar online setelah reservasi tersimpan.
+                  Popup Midtrans terbuka otomatis; tamu memilih metode bayar di sana.
                 </p>
               </div>
             </div>
@@ -497,30 +674,81 @@ export default function NewBooking() {
       {paymentInfo && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div className="modal-content" style={{ backgroundColor: 'var(--surface)', padding: '24px', borderRadius: 'var(--radius-card)', width: '400px', maxWidth: '90%' }}>
-            <h3 className="text-h3 mb-4 text-center">Selesaikan Pembayaran</h3>
+            <h3 className="text-h3 mb-4 text-center">Pembayaran Midtrans</h3>
             <div style={{ backgroundColor: 'var(--primary-50)', padding: '16px', borderRadius: '8px', textAlign: 'center', wordBreak: 'break-all' }}>
               <p className="text-body-small mb-2">Total Tagihan:</p>
               <h2 className="text-h2 text-primary-600 mb-4">{formatIDR(paymentInfo.amount || 0)}</h2>
-              
-              {paymentInfo.channel === 'qris' ? (
+
+              {gatewayState === 'verified' && (
+                <div style={{ backgroundColor: 'var(--success-bg)', color: 'var(--success-fg)', padding: '10px 12px', borderRadius: '6px', marginBottom: '12px' }}>
+                  <p className="text-body-strong">Lunas - reservasi terkonfirmasi.</p>
+                </div>
+              )}
+
+              {gatewayState === 'expired' && (
+                <div style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger-fg)', padding: '10px 12px', borderRadius: '6px', marginBottom: '12px' }}>
+                  <p className="text-body-strong">Kedaluwarsa - buat pembayaran baru.</p>
+                </div>
+              )}
+
+              {gatewayState === 'pending' && (
                 <>
-                  <p className="text-body-strong mb-2">Scan QRIS Berikut:</p>
-                  <div style={{ backgroundColor: 'white', padding: '16px', display: 'inline-block', border: '1px solid var(--border)' }}>
-                    <div style={{ width: '200px', height: '200px', backgroundColor: 'var(--ink-200)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span className="text-ink-500 text-body-small">Dummy QR Image</span>
+                  <p className="text-body-strong mb-2">
+                    {autoOpen === 'snap' && 'Popup pembayaran terbuka.'}
+                    {autoOpen === 'redirect' && 'Dibuka di tab baru.'}
+                    {autoOpen === 'blocked' && 'Popup diblokir - tekan Bayar.'}
+                    {autoOpen === 'nothing' && 'Belum terbuka - tekan Bayar.'}
+                    {!autoOpen && 'Membuka pembayaran...'}
+                  </p>
+
+                  {openError && (
+                    <div style={{ backgroundColor: 'var(--warning-bg)', color: 'var(--warning-fg)', padding: '8px 10px', borderRadius: '6px', marginBottom: '12px' }}>
+                      <p className="text-body-small">{openError}</p>
                     </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    <Button size="sm" onClick={() => void openPayment()}>Bayar</Button>
+                    {paymentInfo.redirect_url && (
+                      <a
+                        href={paymentInfo.redirect_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-body-small"
+                        style={{ color: 'var(--primary-600)' }}
+                      >
+                        Tab baru &rarr;
+                      </a>
+                    )}
                   </div>
+                </>
+              )}
+              
+              {/* Simulator lokal (tanpa token): tidak ada popup, jadi kodenya tampil di sini */}
+              {!paymentInfo.token && (
+                <>
+                  <p className="text-body-small text-ink-500 mb-2">
+                    {paymentInfo.channel === 'qris' ? 'Scan QRIS ini:' : `Kode ${paymentInfo.channel.toUpperCase()}:`}
+                  </p>
+                  {paymentInfo.channel === 'qris' ? (
+                    <div style={{ backgroundColor: 'white', padding: '16px', display: 'inline-block', border: '1px solid var(--border)' }}>
+                      <div style={{ width: '200px', height: '200px', backgroundColor: 'var(--ink-200)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span className="text-ink-500 text-body-small">QR</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-h3" style={{ letterSpacing: '2px' }}>{paymentInfo.qr_string}</p>
+                  )}
                   <p className="text-body-small mt-2">{paymentInfo.qr_string}</p>
                 </>
-              ) : (
-                <>
-                  <p className="text-body-strong mb-2">Kode Pembayaran ({paymentInfo.channel.toUpperCase()}):</p>
-                  <p className="text-h3" style={{ letterSpacing: '2px' }}>{paymentInfo.qr_string}</p>
-                </>
+              )}
+
+              {paymentInfo.environment && (
+                <p className="text-caption text-ink-500" style={{ marginTop: '8px' }}>{paymentInfo.environment}</p>
               )}
             </div>
             <div className="mt-4" style={{ display: 'flex', justifyContent: 'center' }}>
-              <Button onClick={handleClosePaymentModal}>Selesai & Tutup</Button>
+              <Button onClick={handleClosePaymentModal}>Selesai</Button>
             </div>
           </div>
         </div>

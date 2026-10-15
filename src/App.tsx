@@ -3,10 +3,12 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './features/auth/Login';
 import Dashboard from './features/dashboard/Dashboard';
 import RoomBoard from './features/rooms/RoomBoard';
+import RoomTypeList from './features/roomTypes/RoomTypeList';
 import BookingList from './features/bookings/BookingList';
 import NewBooking from './features/bookings/NewBooking';
 import PaymentList from './features/payments/PaymentList';
 import PaymentForm from './features/payments/PaymentForm';
+import PaymentResult from './features/payments/PaymentResult';
 import HousekeepingBoard from './features/housekeeping/HousekeepingBoard';
 import MaintenanceList from './features/maintenance/MaintenanceList';
 import CustomerList from './features/customers/CustomerList';
@@ -14,6 +16,8 @@ import SettingsPage from './features/settings/SettingsPage';
 import UserList from './features/users/UserList';
 import ReportCenter from './features/reports/ReportCenter';
 import { AppShell } from './components/layout/AppShell';
+import { Toaster } from './components/ui/Toast';
+import { GlobalConfirmDialog } from './components/ui/ConfirmDialog';
 
 // Guard untuk rute yang hanya boleh diakses Admin (AGENTS.md Bagian 3)
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -53,6 +57,10 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      {/* Publik: tujuan redirect Midtrans setelah tamu bayar. Tanpa AppShell & tanpa login —
+          status tetap diverifikasi backend ke gateway, bukan dari parameter URL. */}
+      <Route path="/payment-result" element={<PaymentResult />} />
       
       {/* Rute Operasional (Bisa diakses Admin & Pegawai) */}
       <Route path="/dashboard" element={<RequireAuth><AppShell><Dashboard /></AppShell></RequireAuth>} />
@@ -66,6 +74,7 @@ function AppRoutes() {
       <Route path="/customers" element={<RequireAuth><AppShell><CustomerList /></AppShell></RequireAuth>} />
       
       {/* Rute Khusus Admin (Berdasarkan AGENTS.md Bagian 3: Pegawai dilarang) */}
+      <Route path="/room-types" element={<AdminOnly><AppShell><RoomTypeList /></AppShell></AdminOnly>} />
       <Route path="/users" element={<AdminOnly><AppShell><UserList /></AppShell></AdminOnly>} />
       <Route path="/reports" element={<AdminOnly><AppShell><ReportCenter /></AppShell></AdminOnly>} />
       <Route path="/settings" element={<AdminOnly><AppShell><SettingsPage /></AppShell></AdminOnly>} />
@@ -81,6 +90,9 @@ function App() {
     <Router>
       <AuthProvider>
         <AppRoutes />
+        {/* Notifikasi & dialog konfirmasi global (pengganti alert/confirm browser) */}
+        <Toaster />
+        <GlobalConfirmDialog />
       </AuthProvider>
     </Router>
   );

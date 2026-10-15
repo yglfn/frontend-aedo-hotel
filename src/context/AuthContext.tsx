@@ -17,6 +17,8 @@ export interface HotelSettings {
   hotel_phone?: string;
   hotel_email?: string;
   tax_percentage?: number;
+  /** 'simulator'/'sandbox' = mode uji; kosong/naam provider = gateway asli */
+  payment_gateway_provider?: string;
 }
 
 interface AuthContextType {
@@ -34,6 +36,7 @@ interface AuthContextType {
 const defaultHotelSettings: HotelSettings = {
   hotel_name: 'Aedo Hotel Syariah',
   hotel_address: '',
+  payment_gateway_provider: '',
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -63,6 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           hotel_phone: res.data.data.hotel_phone || '',
           hotel_email: res.data.data.hotel_email || '',
           tax_percentage: Number(res.data.data.tax_percentage || 0),
+          payment_gateway_provider: res.data.data.payment_gateway_provider || '',
         });
       }
     } catch (err) {

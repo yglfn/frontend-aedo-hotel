@@ -1,0 +1,108 @@
+.toast-stack {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-pop);
+  animation: toastIn 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.toast-success { border-left-color: var(--success-fg); }
+.toast-info    { border-left-color: var(--info-fg); }
+.toast-warning { border-left-color: var(--warning-fg); }
+.toast-error   { border-left-color: var(--danger-fg); }
+
+.toast-icon {
+  display: flex;
+  align-items: center;
+  margin-top: 1px;
+}
+
+.toast-success .toast-icon { color: var(--success-fg); }
+.toast-info .toast-icon    { color: var(--info-fg); }
+.toast-warning .toast-icon { color: var(--warning-fg); }
+.toast-error .toast-icon   { color: var(--danger-fg); }
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-title {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.toast-message {
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--ink-700);
+  /* Pesan API bisa berisi baris baru (mis. rincian jaminan saat check-out) */
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.toast-close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-400);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.toast-close:hover {
+  background-color: var(--surface-muted);
+  color: var(--ink-700);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .toast-stack {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

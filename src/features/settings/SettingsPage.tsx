@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { toast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -12,6 +13,9 @@ interface HotelSettings {
   default_check_in: string;
   default_check_out: string;
   tax_percentage: string;
+  min_dp_percentage: string;
+  auto_verify_transfers: boolean;
+  auto_verify_max_amount: string;
   payment_expiry_minutes: number;
 }
 
@@ -24,11 +28,13 @@ export default function SettingsPage() {
     default_check_in: '14:00',
     default_check_out: '12:00',
     tax_percentage: '11.00',
+    min_dp_percentage: '0',
+    auto_verify_transfers: true,
+    auto_verify_max_amount: '0',
     payment_expiry_minutes: 60,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -48,11 +54,21 @@ export default function SettingsPage() {
           default_check_in: data.default_check_in ? data.default_check_in.substring(0, 5) : '14:00',
           default_check_out: data.default_check_out ? data.default_check_out.substring(0, 5) : '12:00',
           tax_percentage: data.tax_percentage ? String(data.tax_percentage) : '11.00',
+          min_dp_percentage:
+            data.min_dp_percentage === undefined || data.min_dp_percentage === null
+              ? '0'
+              : String(data.min_dp_percentage),
           payment_expiry_minutes: data.payment_expiry_minutes || 60,
+          auto_verify_transfers: data.auto_verify_transfers !== false,
+          auto_verify_max_amount:
+            data.auto_verify_max_amount === undefined || data.auto_verify_max_amount === null
+              ? '0'
+              : String(data.auto_verify_max_amount),
         });
       }
     } catch (err: any) {
       console.error('Failed to load settings', err);
+      toast.error('Gagal memuat pengaturan sistem.');
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +77,6 @@ export default function SettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setSuccessMsg('');
     setErrorMsg('');
     try {
       const payload = {
@@ -71,12 +86,14 @@ export default function SettingsPage() {
         default_check_in: settings.default_check_in.length === 5 ? `${settings.default_check_in}:00` : settings.default_check_in,
         default_check_out: settings.default_check_out.length === 5 ? `${settings.default_check_out}:00` : settings.default_check_out,
         tax_percentage: parseFloat(settings.tax_percentage) || 0,
+        min_dp_percentage: parseFloat(settings.min_dp_percentage) || 0,
+        auto_verify_transfers: settings.auto_verify_transfers,
+        auto_verify_max_amount: parseFloat(settings.auto_verify_max_amount) || 0,
         payment_expiry_minutes: Number(settings.payment_expiry_minutes) || 60,
       };
       const res = await api.put('/api/v1/settings', payload);
       await refreshSettings();
-      setSuccessMsg(res.data.message || 'Pengaturan hotel berhasil disimpan ke database!');
-      setTimeout(() => setSuccessMsg(''), 4000);
+      toast.success(res.data.message || 'Pengaturan hotel berhasil disimpan.', { title: 'Tersimpan' });
     } catch (err: any) {
       console.error('Failed to save settings', err);
       setErrorMsg(err.response?.data?.message || 'Gagal menyimpan pengaturan ke backend.');
@@ -95,21 +112,6 @@ export default function SettingsPage() {
         <h1 className="text-h1">Pengaturan Sistem</h1>
         <p className="text-body-small text-ink-500 mt-1">Konfigurasi operasional dan profil Aedo Hotel Syariah.</p>
       </div>
-
-      {successMsg && (
-        <div
-          style={{
-            backgroundColor: 'var(--success-bg)',
-            color: 'var(--success-fg)',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-control)',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-        >
-          {successMsg}
-        </div>
-      )}
 
       {errorMsg && (
         <div
@@ -186,12 +188,45 @@ export default function SettingsPage() {
               required
             />
             <Input
+              label="Minimal DP untuk Check-In (%)"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={settings.min_dp_percentage}
+              onChange={(e) => setSettings({ ...settings, min_dp_percentage: e.target.value })}
+              hint="0 = tidak wajib DP. Di atas 0: DP harus lunas sebelum reservasi bisa dikonfirmasi."
+              required
+            />
+            <Input
               label="Batas Waktu Pembayaran Gateway (Menit)"
               type="number"
               value={settings.payment_expiry_minutes.toString()}
               onChange={(e) => setSettings({ ...settings, payment_expiry_minutes: Number(e.target.value) })}
               required
             />
+            <Input
+              label="Plafon Verifikasi Otomatis (Rp)"
+              type="number"
+              min="0"
+              step="50000"
+              value={settings.auto_verify_max_amount}
+              onChange={(e) => setSettings({ ...settings, auto_verify_max_amount: e.target.value })}
+              hint="0 = tanpa plafon. Di atas nilai ini pembayaran tetap butuh persetujuan admin."
+              required
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px' }}>
+              <input
+                type="checkbox"
+                id="auto_verify_transfers"
+                checked={settings.auto_verify_transfers}
+                onChange={(e) => setSettings({ ...settings, auto_verify_transfers: e.target.checked })}
+                style={{ width: '16px', height: '16px' }}
+              />
+              <label htmlFor="auto_verify_transfers" className="text-label">
+                Verifikasi otomatis transfer/QRIS (butuh nomor referensi unik + bukti terunggah)
+              </label>
+            </div>
           </div>
         </Card>
 

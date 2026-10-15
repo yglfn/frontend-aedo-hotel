@@ -5,12 +5,32 @@ import { Button } from '../../components/ui/Button';
 import { FileDown, FileSpreadsheet, BarChart3, TrendingUp, Users, CreditCard, Clock, Brush, Building } from 'lucide-react';
 
 import { api } from '../../lib/api';
+import { apiErrorMessage, toast } from '../../components/ui/Toast';
 
 interface ReportTypeItem {
   id: string;
   title: string;
   description: string;
   icon: React.ReactNode;
+}
+
+/**
+ * Response blob (PDF/Excel) harus dibaca isinya dulu untuk mengambil pesan JSON
+ * dari server, misalnya saat akses ditolak atau tanggal belum diizinkan.
+ */
+async function blobErrorMessage(error: any, fallback: string): Promise<string> {
+  const data = error?.response?.data;
+
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text());
+      return String(parsed?.message || fallback);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return apiErrorMessage(error, fallback);
 }
 
 const REPORT_TYPES: ReportTypeItem[] = [
@@ -44,9 +64,12 @@ export default function ReportCenter() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      toast.success(`Laporan berhasil diunduh sebagai ${format.toUpperCase()}.`);
     } catch (err: any) {
       console.error('Gagal mengunduh laporan', err);
-      alert(err.response?.data?.message || 'Gagal mengunduh laporan dari server.');
+      toast.error(await blobErrorMessage(err, 'Gagal mengunduh laporan dari server.'), {
+        title: 'Unduhan gagal',
+      });
     } finally {
       setDownloadingId(null);
     }

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
+import { confirmDialog } from '../../components/ui/ConfirmDialog';
+import { toast } from '../../components/ui/Toast';
 import './ShiftPanel.css';
 
 export function ShiftPanel() {
@@ -37,18 +39,29 @@ export function ShiftPanel() {
     setIsLoading(true);
     try {
       if (isShiftActive) {
+        const closing = await confirmDialog({
+          title: 'Akhiri Shift?',
+          message:
+            'Transaksi setelah ini tidak masuk shift ini.\n\nPastikan tidak ada tamu yang menunggu di kasir.',
+          confirmLabel: 'Akhiri Shift',
+        });
+
+        if (!closing) return;
+
         await api.post('/api/v1/shifts/end');
         setIsShiftActive(false);
         setShiftTime(null);
+        toast.success('Shift berakhir. Terima kasih!');
       } else {
         await api.post('/api/v1/shifts/start');
         setIsShiftActive(true);
         const now = new Date();
         setShiftTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`);
+        toast.success('Shift dimulai. Transaksi akan tercatat atas shift ini.');
       }
     } catch (error: any) {
       console.error('Failed to toggle shift', error);
-      alert(error.response?.data?.message || 'Gagal memproses shift.');
+      toast.apiError(error, 'Gagal memproses shift.');
     } finally {
       setIsLoading(false);
     }

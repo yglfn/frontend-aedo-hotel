@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck } from 'lucide-react';
+import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck, BedDouble } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './Sidebar.css';
 
@@ -9,11 +9,12 @@ export function Sidebar() {
   // Berdasarkan AGENTS.md Bagian 3:
   // Admin: Akses semua menu
   // Pegawai: Dashboard, Reservasi, Kamar (status), Pelanggan, Pembayaran (tanpa verify), Housekeeping (kerjakan), Maintenance (lapor)
-  // Pegawai TIDAK BOLEH: CRUD Pegawai (Users), Laporan (Reports), Pengaturan (Settings)
+  // Pegawai TIDAK BOLEH: CRUD tipe kamar & harga, CRUD Pegawai (Users), Laporan (Reports), Pengaturan (Settings)
   const menuItems = [
     { icon: <Home size={20} />, label: 'Dashboard', path: '/dashboard', show: true },
     { icon: <Calendar size={20} />, label: 'Check-In / Out', path: '/reservations', show: true },
     { icon: <CheckSquare size={20} />, label: 'Kamar', path: '/rooms', show: true },
+    { icon: <BedDouble size={20} />, label: 'Tipe Kamar', path: '/room-types', show: isAdmin },
     { icon: <UserCheck size={20} />, label: 'Pelanggan', path: '/customers', show: true },
     { icon: <FileText size={20} />, label: 'Pembayaran', path: '/payments', show: true },
     { icon: <Briefcase size={20} />, label: 'Housekeeping', path: '/housekeeping', show: true },

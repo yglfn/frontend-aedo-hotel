@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Tabs } from '../../components/ui/Tabs';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Drawer } from '../../components/ui/Drawer';
+import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 
 interface MaintenanceTask {
@@ -71,9 +72,15 @@ export default function MaintenanceList() {
     try {
       await api.patch(`/api/v1/maintenance/${id}/status`, { status: newStatus });
       setTasks(tasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
+
+      toast.success(
+        newStatus === 'resolved'
+          ? 'Kerusakan ditandai selesai. Silakan perbarui status kamar bila perlu.'
+          : 'Permintaan perbaikan sedang dikerjakan.'
+      );
     } catch (error) {
       console.error('Failed to update maintenance status', error);
-      alert('Gagal mengubah status maintenance.');
+      toast.apiError(error, 'Gagal mengubah status maintenance.');
     }
   };
 
@@ -89,9 +96,10 @@ export default function MaintenanceList() {
       setIsDrawerOpen(false);
       setNewDesc('');
       await fetchTasks();
+      toast.success('Laporan kerusakan kamar terkirim.');
     } catch (error: any) {
       console.error('Failed to create maintenance task', error);
-      setErrorMsg(error.response?.data?.message || 'Gagal membuat laporan maintenance.');
+      setErrorMsg(apiErrorMessage(error, 'Gagal membuat laporan maintenance.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -107,7 +115,7 @@ export default function MaintenanceList() {
     { 
       key: 'reporter', 
       header: 'Pelapor', 
-      cell: (t) => (typeof t.reported_by === 'object' && t.reported_by ? t.reported_by.name : (t.reported_by || '-')) 
+      cell: (t) => (typeof t.reported_by === 'string' ? t.reported_by : (t.reported_by?.name ?? '-')), 
     },
     { key: 'status', header: 'Status', cell: (t) => <StatusBadge type="maintenance" value={t.status} /> },
     { 

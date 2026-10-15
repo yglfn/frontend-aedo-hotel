@@ -4,6 +4,7 @@ import type { Column } from '../../components/ui/Table';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Drawer } from '../../components/ui/Drawer';
+import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 
 interface Customer {
@@ -85,9 +86,13 @@ export default function CustomerList() {
       }
       setIsDrawerOpen(false);
       await fetchCustomers();
+      toast.success(
+        editingCustomer ? `Data ${formData.name} tersimpan.` : `Pelanggan ${formData.name} berhasil ditambahkan.`,
+        { title: 'Tersimpan' }
+      );
     } catch (error: any) {
       console.error('Failed to save customer', error);
-      setErrorMsg(error.response?.data?.message || 'Gagal menyimpan data pelanggan.');
+      setErrorMsg(apiErrorMessage(error, 'Gagal menyimpan data pelanggan.'));
     } finally {
       setIsSubmitting(false);
     }

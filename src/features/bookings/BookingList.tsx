@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Table } from '../../components/ui/Table';
@@ -8,7 +8,11 @@ import { Input } from '../../components/ui/Input';
 import { Tabs } from '../../components/ui/Tabs';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Drawer } from '../../components/ui/Drawer';
+import { apiErrorMessage, toast } from '../../components/ui/Toast';
+import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import { formatIDR, formatDateShort } from '../../lib/format';
+import { syncPendingGatewayPayments } from '../../lib/gatewaySync';
+import { useAuth } from '../../context/AuthContext';
 import type { BookingStatus } from '../../types';
 import './BookingList.css';
 
@@ -29,14 +33,23 @@ interface Booking {
     id: number;
     amount: number;
     method: string;
+    type?: string;
     status: string;
   }>;
   invoice?: { id: number; status: string; total: string };
+  // Ringkasan pembayaran dihitung ulang oleh backend (satu rumus untuk semua layar)
+  paid_verified?: number;
+  paid_pending?: number;
+  invoice_total?: number;
+  remaining_due?: number;
+  has_pending_payment?: boolean;
+  blocks_manual_payment?: boolean;
 }
 
 export default function CheckInOutCenter() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'checkin';
+  const { isAdmin } = useAuth();
   
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,32 +75,58 @@ export default function CheckInOutCenter() {
 
   const navigate = useNavigate();
 
+  const requestSeq = useRef(0);
+
+  // Status per tab dikirim ke server agar Reservasi lama (di luar halaman pertama) tetap dicari
+  const TAB_STATUS: Record<string, string> = {
+    checkin: 'pending,confirmed',
+    checkout: 'checked_in',
+    riwayat: 'checked_out,cancelled',
+  };
+
+  // Debounce 300ms supaya pencarian tidak mengirim banyak request
   useEffect(() => {
-    fetchBookings();
-  }, [activeTab]);
+    const handler = setTimeout(() => fetchBookings(), 300);
+    return () => clearTimeout(handler);
+  }, [activeTab, search]);
 
   const fetchBookings = async () => {
+    const requestId = ++requestSeq.current;
     try {
       setIsLoading(true);
-      const response = await api.get('/api/v1/bookings');
+
+      // Status bayar reservasi mengikuti kenyataan di gateway, bukan menunggu tombol
+      // "Cek Status" ditekan (di dev tidak ada cron dan webhook tidak selalu bisa masuk)
+      await syncPendingGatewayPayments();
+
+      const params = new URLSearchParams({ per_page: '100' });
+      if (TAB_STATUS[activeTab]) params.set('status', TAB_STATUS[activeTab]);
+      if (search.trim()) params.set('search', search.trim());
+
+      const response = await api.get(`/api/v1/bookings?${params.toString()}`);
+      if (requestId !== requestSeq.current) return;
+
       const raw = response.data?.data;
       const list = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : []);
       setBookings(list);
     } catch (error) {
+      if (requestId !== requestSeq.current) return;
       console.error('Failed to fetch bookings', error);
       setBookings([]);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestSeq.current) setIsLoading(false);
     }
   };
 
-  // Helper untuk hitung total tagihan riil (mengikuti invoice jika ada, atau total_price)
+  // Helper tagihan. Nilai dari server selalu dipakai lebih dulu supaya UI, backend,
+  // dan laporan memakai angka yang sama (dulu UI hanya menjumlah payment `verified`).
   const calculateTotal = (b: Booking) => {
+    if (typeof b.invoice_total === 'number') return b.invoice_total;
     return b.invoice ? Number(b.invoice.total) : Number(b.total_price);
   };
 
-  // Helper untuk hitung total pembayaran yang valid
   const calculatePaid = (b: Booking) => {
+    if (typeof b.paid_verified === 'number') return b.paid_verified;
     if (!b.payments || !Array.isArray(b.payments)) {
       return 0;
     }
@@ -96,11 +135,50 @@ export default function CheckInOutCenter() {
       .reduce((sum, p) => sum + Number(p.amount || 0), 0);
   };
 
-  // Helper untuk hitung sisa tagihan
+  const calculatePending = (b: Booking) => {
+    if (typeof b.paid_pending === 'number') return b.paid_pending;
+    return (b.payments || [])
+      .filter((p) => p.status === 'pending')
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  };
+
+  /** Sisa yang masih boleh ditagih = total - verified - pending */
   const calculateRemaining = (b: Booking) => {
+    if (typeof b.remaining_due === 'number') return b.remaining_due;
+    return Math.max(0, calculateTotal(b) - calculatePaid(b) - calculatePending(b));
+  };
+
+  /** true bila ada transfer/QRIS manual menunggu verifikasi admin -> jangan menagih lagi */
+  const blockedByPendingPayment = (b: Booking) => {
+    if (typeof b.blocks_manual_payment === 'boolean') return b.blocks_manual_payment;
+    return (b.payments || []).some(
+      (p) => p.status === 'pending' && p.method !== 'payment_gateway'
+    );
+  };
+
+  /**
+   * Status pembayaran yang jujur. "Lunas" hanya kalau uang verified sudah menutup tagihan.
+   * Payment pending BELUM uang masuk - dulu kasus ini tertulis "LUNAS" dengan Sudah Dibayar
+   * Rp 0 sehingga menipu kasir di layar check-in.
+   */
+  const paymentState = (b: Booking): { tone: 'lunas' | 'pending' | 'unpaid' | 'unknown'; label: string } => {
     const total = calculateTotal(b);
     const paid = calculatePaid(b);
-    return Math.max(0, total - paid);
+    const pending = calculatePending(b);
+    const sisa = calculateRemaining(b);
+
+    if (![total, paid, pending, sisa].every(Number.isFinite)) {
+      return { tone: 'unknown', label: 'Belum diketahui' };
+    }
+
+    if ((total > 0 && paid >= total) || b.invoice?.status === 'paid') {
+      return { tone: 'lunas', label: 'Lunas' };
+    }
+
+    if (paid > 0) return { tone: 'unpaid', label: `Kurang ${formatIDR(sisa)}` };
+    if (pending > 0) return { tone: 'pending', label: 'Menunggu verifikasi' };
+
+    return { tone: 'unpaid', label: 'Belum bayar' };
   };
 
   // Filter list berdasarkan tab aktif
@@ -123,16 +201,90 @@ export default function CheckInOutCenter() {
     }
   });
 
-  // Action: Open Check-In Modal with Guarantee
-  const handleOpenCheckInModal = (b: Booking) => {
-    const sisa = calculateRemaining(b);
-    
-    // Validasi Pembayaran Sebelum Check-In
-    if (b.status === 'pending' && sisa > 0) {
-      const confirmPay = confirm(
-        `PERINGATAN: Reservasi ${b.booking_code} belum lunas (Kurang: ${formatIDR(sisa)}).\n\nApakah Anda ingin mencatat pembayaran terlebih dahulu sekarang?`
+  // Buka form jaminan + check-in (dipakai beberapa jalur di bawah)
+  const openCheckInForm = (b: Booking) => {
+    setCheckInTarget(b);
+    setGuaranteeType('ktp');
+    setGuaranteeNote(`KTP Asli an. ${b.customer?.name || 'Tamu'}`);
+    setDepositAmount('0');
+    setIsCheckInModalOpen(true);
+  };
+
+  /** Ambil versi terbaru satu reservasi (status & sisa berubah setelah verifikasi/konfirmasi) */
+  const reloadBooking = async (b: Booking): Promise<Booking | null> => {
+    try {
+      const res = await api.get(`/api/v1/bookings/${b.id}`);
+      return (res.data?.data as Booking) || null;
+    } catch (error) {
+      console.error('Failed to reload booking', error);
+      return null;
+    }
+  };
+
+  /** Verifikasi payment manual yang pending, langsung dari layar check-in (admin only) */
+  const verifyPendingPayments = async (b: Booking): Promise<boolean> => {
+    const pending = (b.payments || []).filter(
+      (p) => p.status === 'pending' && p.method !== 'payment_gateway'
+    );
+
+    try {
+      for (const payment of pending) {
+        await api.patch(`/api/v1/payments/${payment.id}/verify`);
+      }
+
+      toast.success(
+        pending.length > 1
+          ? `${pending.length} pembayaran diverifikasi.`
+          : 'Pembayaran diverifikasi dan reservasi diperbarui.'
       );
-      if (confirmPay) {
+      await fetchBookings();
+      return true;
+    } catch (error: any) {
+      console.error('Verify pending payments failed', error);
+      toast.apiError(error, 'Gagal memverifikasi pembayaran.');
+      return false;
+    }
+  };
+
+  /**
+   * Action: check-in dengan 4 keadaan yang jelas. Inti perbaikannya: pembayaran yang
+   * sudah masuk tapi belum diverifikasi tidak pernah ditagih ulang lagi.
+   */
+  const handleOpenCheckInModal = async (b: Booking) => {
+    const sisa = calculateRemaining(b);
+
+    // (1) Ada transfer/QRIS manual menunggu verifikasi admin
+    if (blockedByPendingPayment(b)) {
+      if (!isAdmin) {
+        toast.info(`Pembayaran ${b.booking_code} masih menunggu verifikasi admin.`, {
+          title: 'Menunggu Verifikasi',
+        });
+        return;
+      }
+
+      const doVerify = await confirmDialog({
+        title: 'Verifikasi Pembayaran',
+        message: `Pembayaran reservasi ${b.booking_code} belum diverifikasi. Verifikasi sekarang untuk melanjutkan check-in?`,
+        confirmLabel: 'Verifikasi & Lanjutkan',
+        cancelLabel: 'Batal',
+      });
+
+      if (doVerify && (await verifyPendingPayments(b))) {
+        const updated = await reloadBooking(b);
+        if (updated) openCheckInForm(updated);
+      }
+      return;
+    }
+
+    // (2) Belum terkonfirmasi dan masih ada sisa -> tawarkan catat pembayaran (walk-in)
+    if (b.status !== 'confirmed' && sisa > 0) {
+      const payNow = await confirmDialog({
+        title: 'Pembayaran Belum Lunas',
+        message: `Reservasi ${b.booking_code} belum lunas (kurang ${formatIDR(sisa)}). Catat pembayaran sekarang?`,
+        confirmLabel: 'Catat Pembayaran',
+        cancelLabel: 'Nanti',
+      });
+      if (payNow) {
         setPayTarget(b);
         setPayAmount(String(sisa));
         setIsPayModalOpen(true);
@@ -140,11 +292,32 @@ export default function CheckInOutCenter() {
       return;
     }
 
-    setCheckInTarget(b);
-    setGuaranteeType('ktp');
-    setGuaranteeNote(`KTP Asli an. ${b.customer?.name || 'Tamu'}`);
-    setDepositAmount('0');
-    setIsCheckInModalOpen(true);
+    // (3) Uang sudah cukup tapi reservasi belum dikonfirmasi (mis. Traveloka/kredit)
+    if (b.status !== 'confirmed') {
+      const doConfirm = await confirmDialog({
+        title: 'Konfirmasi Reservasi',
+        message: `Tagihan ${b.booking_code} sudah cukup untuk check-in, tapi reservasi belum dikonfirmasi.\n\nKonfirmasi sekarang lalu lanjutkan check-in?`,
+        confirmLabel: 'Konfirmasi & Check-In',
+        cancelLabel: 'Nanti',
+      });
+
+      if (!doConfirm) return;
+
+      try {
+        await api.post(`/api/v1/bookings/${b.id}/confirm`);
+        toast.success(`Reservasi ${b.booking_code} dikonfirmasi.`);
+        await fetchBookings();
+        const updated = await reloadBooking(b);
+        if (updated) openCheckInForm(updated);
+      } catch (error: any) {
+        console.error('Confirm booking failed', error);
+        toast.apiError(error, 'Gagal mengonfirmasi reservasi.');
+      }
+      return;
+    }
+
+    // (4) Sudah confirmed -> langsung catat jaminan & check-in
+    openCheckInForm(b);
   };
 
   // Action: Confirm Check-In + Simpan Jaminan
@@ -172,10 +345,13 @@ export default function CheckInOutCenter() {
       setIsCheckInModalOpen(false);
       setCheckInTarget(null);
       await fetchBookings();
-      alert(`Berhasil Check-In!\nKamar telah dialihkan ke Occupied dan Jaminan (${guaranteeType.toUpperCase()}) telah dicatat.`);
+      toast.success(
+        `Kamar dialihkan ke Occupied dan Jaminan (${guaranteeType.toUpperCase()}) telah dicatat.`,
+        { title: 'Check-In Berhasil' }
+      );
     } catch (error: any) {
       console.error('Check-in error', error);
-      alert(error.response?.data?.message || error.response?.data?.error || 'Gagal memproses check-in.');
+      toast.error(apiErrorMessage(error, 'Gagal memproses check-in.'), { title: 'Check-In Gagal' });
     } finally {
       setIsProcessing(false);
     }
@@ -194,10 +370,10 @@ export default function CheckInOutCenter() {
       });
       setIsPayModalOpen(false);
       await fetchBookings();
-      alert('Pembayaran berhasil dicatat!');
+      toast.success('Pembayaran berhasil dicatat.');
     } catch (error: any) {
       console.error('Payment error', error);
-      alert(error.response?.data?.message || 'Gagal menyimpan pembayaran.');
+      toast.error(apiErrorMessage(error, 'Gagal menyimpan pembayaran.'), { title: 'Pembayaran Gagal' });
     } finally {
       setIsProcessing(false);
     }
@@ -205,14 +381,27 @@ export default function CheckInOutCenter() {
 
   // Action: Check-Out
   const handleProcessCheckOut = async (b: Booking) => {
-    // 1. Cek apakah tagihan sudah lunas sebelum checkout (Aturan Bisnis No. 6)
+    // Pembayaran manual yang belum diverifikasi dianggap belum lunas oleh backend.
+    // Tahan di sini dengan pesan yang jelas daripada check-out gagal tanpa sebab.
+    if (blockedByPendingPayment(b)) {
+      toast.warning(
+        `Pembayaran ${b.booking_code} masih menunggu verifikasi admin.`,
+        { title: 'Menunggu Verifikasi' }
+      );
+      return;
+    }
+
+    // 1. Cek apakah tagihan sudah lunas sebelum checkout
     const sisa = calculateRemaining(b);
 
     if (sisa > 0) {
-      const confirmPay = confirm(
-        `CHECK-OUT DITOLAK: Tagihan tamu belum lunas!\nSisa tagihan yang harus dibayar: ${formatIDR(sisa)}.\n\nApakah Anda ingin memproses pelunasan sekarang di meja kasir?`
-      );
-      if (confirmPay) {
+      const payNow = await confirmDialog({
+        title: 'Pelunasan Tagihan',
+        message: `Sisa tagihan: ${formatIDR(sisa)}. Proses pelunasan sekarang?`,
+        confirmLabel: 'Pelunasan',
+        cancelLabel: 'Batal',
+      });
+      if (payNow) {
         setPayTarget(b);
         setPayAmount(String(sisa));
         setIsPayModalOpen(true);
@@ -225,10 +414,17 @@ export default function CheckInOutCenter() {
     const guarantee = existingGuarantees[b.id];
     let guaranteeMsg = '';
     if (guarantee) {
-      guaranteeMsg = `\n\n[PENGEMBALIAN JAMINAN]:\n- Jaminan tersimpan: ${guarantee.type?.toUpperCase()} (${guarantee.note})\n- Uang Deposit: ${formatIDR(guarantee.deposit || 0)}\nPASTIKAN JAMINAN DIKEMBALIKAN KE TAMU!`;
+      guaranteeMsg = `\nPengembalian Jaminan: ${guarantee.type?.toUpperCase()} (${formatIDR(guarantee.deposit || 0)})`;
     }
 
-    if (!confirm(`Proses Check-Out sekarang untuk ${b.customer?.name} (${b.booking_code})?${guaranteeMsg}`)) {
+    const proceed = await confirmDialog({
+      title: 'Konfirmasi Check-Out',
+      message: `Selesaikan check-out untuk ${b.customer?.name} (${b.booking_code})?${guaranteeMsg}`,
+      confirmLabel: 'Check-Out',
+      cancelLabel: 'Batal',
+    });
+
+    if (!proceed) {
       return;
     }
 
@@ -243,10 +439,13 @@ export default function CheckInOutCenter() {
       }
 
       await fetchBookings();
-      alert(`Check-Out sukses!\nKamar telah dialihkan ke tim Housekeeping untuk dibersihkan.`);
+      toast.success('Kamar dialihkan ke tim Housekeeping untuk dibersihkan.', {
+        title: 'Check-Out Sukses',
+        duration: 8000,
+      });
     } catch (error: any) {
       console.error('Check-out error', error);
-      alert(error.response?.data?.message || error.response?.data?.error || 'Gagal check out.');
+      toast.error(apiErrorMessage(error, 'Gagal check out.'), { title: 'Check-Out Gagal' });
     } finally {
       setIsProcessing(false);
     }
@@ -284,28 +483,15 @@ export default function CheckInOutCenter() {
       key: 'payment_status',
       header: 'Status Pembayaran',
       cell: (b) => {
-        const sisa = calculateRemaining(b);
-        const isLunas = sisa <= 0 || b.invoice?.status === 'paid';
+        const state = paymentState(b);
 
-        if (isLunas) {
-          return (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '4px 10px',
-                borderRadius: '9999px',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: 'rgba(34, 197, 94, 0.15)',
-                color: '#15803d',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-              }}
-            >
-              ● Lunas
-            </span>
-          );
-        }
+        const tone = state.tone === 'lunas'
+          ? { bg: 'rgba(34, 197, 94, 0.15)', fg: '#15803d', border: 'rgba(34, 197, 94, 0.3)' }
+          : state.tone === 'pending'
+            ? { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)', border: 'rgba(154, 100, 16, 0.25)' }
+            : state.tone === 'unknown'
+              ? { bg: 'var(--ink-100)', fg: 'var(--ink-500)', border: 'var(--border)' }
+              : { bg: 'rgba(239, 68, 68, 0.15)', fg: '#b91c1c', border: 'rgba(239, 68, 68, 0.3)' };
 
         return (
           <span
@@ -316,12 +502,12 @@ export default function CheckInOutCenter() {
               borderRadius: '9999px',
               fontSize: '12px',
               fontWeight: 600,
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
-              color: '#b91c1c',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
+              backgroundColor: tone.bg,
+              color: tone.fg,
+              border: `1px solid ${tone.border}`,
             }}
           >
-            ● Kurang {formatIDR(sisa)}
+            ● {state.label}
           </span>
         );
       },
@@ -347,7 +533,13 @@ export default function CheckInOutCenter() {
                 variant={b.status === 'confirmed' ? 'primary' : 'secondary'}
                 onClick={() => handleOpenCheckInModal(b)}
               >
-                {b.status === 'confirmed' ? 'Check-In' : 'Bayar & Check-In'}
+                {b.status === 'confirmed'
+                  ? 'Check-In'
+                  : blockedByPendingPayment(b)
+                    ? 'Menunggu Verifikasi'
+                    : calculateRemaining(b) > 0
+                      ? 'Bayar & Check-In'
+                      : 'Konfirmasi & Check-In'}
               </Button>
             )}
 
@@ -457,10 +649,23 @@ export default function CheckInOutCenter() {
                 <span className="text-body-small">Durasi Menginap:</span>
                 <span className="text-body-strong">{formatDateShort(checkInTarget.check_in)} s/d {formatDateShort(checkInTarget.check_out)}</span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span className="text-body-small">Tagihan:</span>
+                <span className="text-body-strong">{formatIDR(calculateTotal(checkInTarget))}</span>
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="text-body-small">Status Tagihan:</span>
-                <span className="text-body-strong" style={{ color: 'var(--success-600)' }}>
-                  Lunas ({formatIDR(checkInTarget.total_price)})
+                <span className="text-body-small">Status Pembayaran:</span>
+                <span
+                  className="text-body-strong"
+                  style={{
+                    color: paymentState(checkInTarget).tone === 'lunas'
+                      ? 'var(--success-600)'
+                      : paymentState(checkInTarget).tone === 'pending'
+                        ? 'var(--warning-fg)'
+                        : '#b91c1c',
+                  }}
+                >
+                  {paymentState(checkInTarget).label}
                 </span>
               </div>
             </div>
@@ -652,10 +857,31 @@ export default function CheckInOutCenter() {
                   <span>Sudah Dibayar (Verified)</span>
                   <span className="text-body-strong" style={{ color: '#15803d' }}>{formatIDR(calculatePaid(selectedBooking))}</span>
                 </div>
+                {calculatePending(selectedBooking) > 0 && (
+                  <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Menunggu Verifikasi</span>
+                    <span className="text-body-strong" style={{ color: 'var(--warning-fg)' }}>
+                      {formatIDR(calculatePending(selectedBooking))}
+                    </span>
+                  </div>
+                )}
                 <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '6px' }}>
                   <span>Sisa Tagihan</span>
-                  <span className="text-body-strong" style={{ color: calculateRemaining(selectedBooking) > 0 ? '#b91c1c' : '#15803d' }}>
-                    {calculateRemaining(selectedBooking) > 0 ? formatIDR(calculateRemaining(selectedBooking)) : 'LUNAS'}
+                  <span
+                    className="text-body-strong"
+                    style={{
+                      color: paymentState(selectedBooking).tone === 'lunas'
+                        ? '#15803d'
+                        : paymentState(selectedBooking).tone === 'pending'
+                          ? 'var(--warning-fg)'
+                          : '#b91c1c',
+                    }}
+                  >
+                    {paymentState(selectedBooking).tone === 'lunas'
+                      ? 'LUNAS'
+                      : paymentState(selectedBooking).tone === 'pending'
+                        ? 'Belum ada uang masuk'
+                        : formatIDR(calculateRemaining(selectedBooking))}
                   </span>
                 </div>
               </div>

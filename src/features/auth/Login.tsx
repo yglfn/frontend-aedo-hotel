@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../lib/api';
+import { apiErrorMessage } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 
@@ -36,8 +37,17 @@ export default function Login() {
       // Redirect
       navigate('/dashboard');
     } catch (error: any) {
-      if (error.response?.status === 422) {
-        setErrorMsg(error.response.data.message || 'Email atau password salah.');
+      const status = error.response?.status;
+
+      if (status === 429) {
+        // Route login diproteksi throttle di backend (AGENTS.md bagian 9)
+        setErrorMsg('Terlalu banyak percobaan login. Coba lagi dalam 1 menit.');
+      } else if (status === 422) {
+        // Prioritaskan pesan per-field berbahasa Indonesia dari server, misalnya
+        // "Email atau password salah." atau "Akun Anda tidak aktif."
+        setErrorMsg(apiErrorMessage(error, 'Email atau password salah.'));
+      } else if (!error.response) {
+        setErrorMsg('Server tidak dapat dihubungi. Pastikan backend berjalan di port 8000.');
       } else {
         setErrorMsg('Terjadi kesalahan. Silakan coba lagi.');
       }

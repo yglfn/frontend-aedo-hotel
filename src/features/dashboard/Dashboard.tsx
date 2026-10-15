@@ -146,7 +146,7 @@ export default function Dashboard() {
         <section className="dashboard-section">
           <HighlightCard
             title="Anda belum memulai shift"
-            description="Sebagai pegawai, Anda wajib membuka shift tugas di menu atas sebelum mencatat reservasi atau pembayaran."
+            description="Pegawai wajib membuka shift di menu atas sebelum mencatat reservasi atau pembayaran."
             action={
               <span className="text-body-small text-ink-600">
                 Gunakan tombol "Mulai Shift" di pojok kanan atas layar.

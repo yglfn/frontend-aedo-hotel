@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { toast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 import { formatIDR } from '../../lib/format';
 import './PaymentForm.css';
@@ -102,7 +103,8 @@ export default function PaymentForm() {
         type: paymentType,
         notes: notes || undefined,
       };
-      await api.post(`/api/v1/bookings/${bookingId}/payments`, payload);
+      const res = await api.post(`/api/v1/bookings/${bookingId}/payments`, payload);
+      toast.success(res.data?.message || 'Pembayaran berhasil dicatat.', { title: 'Pembayaran Tersimpan' });
       navigate('/payments');
     } catch (error: any) {
       console.error('Failed to submit payment', error);
@@ -159,18 +161,17 @@ export default function PaymentForm() {
             )}
             {remaining === 0 && (
               <div style={{ backgroundColor: 'var(--warning-bg, #fff7e6)', color: 'var(--warning-fg, #995c00)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px' }}>
-                Reservasi ini sudah lunas (termasuk yang masih pending). Tidak ada sisa tagihan.
+                Reservasi ini sudah lunas.
               </div>
             )}
             {hasBlockingPending && (
               <div style={{ backgroundColor: 'var(--danger-bg, #fff1f0)', color: 'var(--danger-fg, #9a0b0b)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px' }}>
-                ⚠ Sudah ada <strong>{pendingForCurrentType.length} pembayaran {paymentType === 'dp' ? 'DP' : 'pelunasan'} berstatus pending</strong> ({pendingForCurrentType.map(p => p.method).join(', ')}) untuk reservasi ini.
-                Verifikasi atau tolak pembayaran tersebut di halaman <em>Daftar Pembayaran</em> sebelum mencatat yang baru.
+                Ada pembayaran pending yang belum diverifikasi untuk reservasi ini.
               </div>
             )}
             {availableRemaining !== null && availableRemaining > 0 && (
               <span className="text-body-small text-ink-500">
-                Sisa tersedia (setelah kurangi verified &amp; pending): {formatIDR(availableRemaining)}
+                Sisa tagihan: {formatIDR(availableRemaining)}
               </span>
             )}
           </div>
@@ -256,7 +257,7 @@ export default function PaymentForm() {
           <div className="form-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {paymentMethod !== 'cash' && (
               <div style={{ backgroundColor: 'var(--info-bg, #e6f4ff)', color: 'var(--info-fg, #0958d9)', padding: '8px 12px', borderRadius: '6px', fontSize: '12px' }}>
-                Pembayaran {paymentMethod === 'transfer' ? 'transfer' : 'QRIS'} akan berstatus <strong>Menunggu Verifikasi Admin</strong> setelah dicatat.
+                Pembayaran non-tunai memerlukan verifikasi admin.
               </div>
             )}
             <Button
