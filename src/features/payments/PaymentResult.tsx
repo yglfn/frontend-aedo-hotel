@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Clock, XCircle, ShieldAlert } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
@@ -12,6 +12,10 @@ import { formatIDR, formatDateShort } from '../../lib/format';
  * Status yang ditampilkan tidak pernah diambil dari parameter URL: halaman ini hanya
  * membaca jawaban /api/payment-result/{order_id}, dan endpoint itulah yang menverifikasi
  * ke gateway. Selama masih pending, status diulang otomatis.
+ *
+ * Kalau sudah berhasil, tidak ada lagi tombol cek - uang sudah masuk, tidak ada yang perlu
+ * diperiksa ulang; tombolnya mengembalikan user ke halaman sistem (staf yang sudah login
+ * kembali ke dashboard, tamu jatuh ke halaman masuk).
  */
 
 interface PaymentResultData {
@@ -52,6 +56,7 @@ const cardStyle: CSSProperties = {
 
 export default function PaymentResult() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const orderId = params.get('order_id') || params.get('orderId') || '';
 
   // Seluruh parameter redirect Midtrans diteruskan apa adanya (transaction_status, status_code,
@@ -180,9 +185,15 @@ export default function PaymentResult() {
             )}
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="secondary" isLoading={isChecking} onClick={() => void load()}>
-                Cek Sekarang
-              </Button>
+              {status === 'verified' ? (
+                <Button variant="primary" onClick={() => navigate('/', { replace: true })}>
+                  Kembali ke Sistem
+                </Button>
+              ) : (
+                <Button variant="secondary" isLoading={isChecking} onClick={() => void load()}>
+                  Cek Sekarang
+                </Button>
+              )}
             </div>
           </>
         )}

@@ -42,6 +42,8 @@ interface Booking {
   paid_pending?: number;
   invoice_total?: number;
   remaining_due?: number;
+  dp_min_amount?: number;
+  dp_shortfall?: number;
   has_pending_payment?: boolean;
   blocks_manual_payment?: boolean;
 }
@@ -72,6 +74,8 @@ export default function CheckInOutCenter() {
   const [payTarget, setPayTarget] = useState<Booking | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('cash');
+  // Meja bisa menerima uang muka (DP) saja, tidak selalu pelunasan penuh.
+  const [payType, setPayType] = useState<'dp' | 'final'>('final');
 
   const navigate = useNavigate();
 
@@ -181,6 +185,43 @@ export default function CheckInOutCenter() {
     return { tone: 'unpaid', label: 'Belum bayar' };
   };
 
+  /** Kekurangan DP terhadap ambang minimum hotel (0 bila tidak diwajibkan / sudah cukup). */
+  const dpShortfall = (b: Booking) => {
+    if (typeof b.dp_shortfall === 'number') return b.dp_shortfall;
+
+    const min = Number(b.dp_min_amount ?? 0);
+
+    return min > 0 ? Math.max(0, Math.round(min - calculatePaid(b))) : 0;
+  };
+
+  /**
+   * Buka modal pembayaran meja. Saat reservasi masih menunggu uang muka, default-nya DP
+   * dengan nominal sebesar kekurangan ambang - itu memang yang dicari kasir untuk mengunci
+   * kamar. Untuk pelunasan (mis. check-out), default tetap penuh.
+   */
+  const openPaymentModal = (b: Booking, sisa: number, preferDp = false) => {
+    const kurang = dpShortfall(b);
+    const useDp = preferDp && kurang > 0 && kurang < sisa;
+
+    setPayType(useDp ? 'dp' : 'final');
+    setPayAmount(String(useDp ? kurang : sisa));
+    setPayTarget(b);
+    setIsPayModalOpen(true);
+  };
+
+  /** Ganti jenis pembayaran di modal: DP mengikuti ambang, pelunasan mengikuti sisa. */
+  const choosePayType = (type: 'dp' | 'final') => {
+    setPayType(type);
+
+    if (!payTarget) return;
+
+    const sisa = calculateRemaining(payTarget);
+    const kurang = dpShortfall(payTarget);
+
+    if (type === 'dp' && kurang > 0 && kurang < sisa) setPayAmount(String(kurang));
+    if (type === 'final') setPayAmount(String(sisa));
+  };
+
   // Filter list berdasarkan tab aktif
   const filteredList = bookings.filter((b) => {
     const matchesSearch =
@@ -285,9 +326,8 @@ export default function CheckInOutCenter() {
         cancelLabel: 'Nanti',
       });
       if (payNow) {
-        setPayTarget(b);
-        setPayAmount(String(sisa));
-        setIsPayModalOpen(true);
+        // Reservasi belum terkunci: kasir biasanya cukup menerima DP dulu
+        openPaymentModal(b, sisa, true);
       }
       return;
     }
@@ -365,12 +405,14 @@ export default function CheckInOutCenter() {
       await api.post(`/api/v1/bookings/${payTarget.id}/payments`, {
         amount: Number(payAmount),
         method: payMethod,
-        type: 'final',
-        notes: `Pembayaran langsung di meja resepsionis`,
+        type: payType,
+        notes: payType === 'dp'
+          ? 'Uang muka (DP) diterima di meja resepsionis'
+          : 'Pembayaran langsung di meja resepsionis',
       });
       setIsPayModalOpen(false);
       await fetchBookings();
-      toast.success('Pembayaran berhasil dicatat.');
+      toast.success(payType === 'dp' ? 'DP diterima.' : 'Pembayaran berhasil dicatat.');
     } catch (error: any) {
       console.error('Payment error', error);
       toast.error(apiErrorMessage(error, 'Gagal menyimpan pembayaran.'), { title: 'Pembayaran Gagal' });
@@ -402,9 +444,7 @@ export default function CheckInOutCenter() {
         cancelLabel: 'Batal',
       });
       if (payNow) {
-        setPayTarget(b);
-        setPayAmount(String(sisa));
-        setIsPayModalOpen(true);
+        openPaymentModal(b, sisa);
       }
       return;
     }
@@ -747,12 +787,37 @@ export default function CheckInOutCenter() {
               maxWidth: '92%',
             }}
           >
-            <h2 className="text-h2 mb-2">Pelunasan Sebelum Check-In</h2>
+            <h2 className="text-h2 mb-2">{payType === 'dp' ? 'Terima DP' : 'Pembayaran Sebelum Check-In'}</h2>
             <p className="text-body-small text-ink-500 mb-4">
-              Catat penerimaan pembayaran untuk <strong>{payTarget.customer?.name}</strong>.
+              Catat penerimaan untuk <strong>{payTarget.customer?.name}</strong>.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label className="text-label mb-1" style={{ display: 'block' }}>Jenis Pembayaran:</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button
+                    size="sm"
+                    variant={payType === 'dp' ? 'primary' : 'secondary'}
+                    onClick={() => choosePayType('dp')}
+                  >
+                    DP (uang muka)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={payType === 'final' ? 'primary' : 'secondary'}
+                    onClick={() => choosePayType('final')}
+                  >
+                    Pelunasan
+                  </Button>
+                </div>
+                {dpShortfall(payTarget) > 0 && (
+                  <p className="text-caption text-ink-500 mt-1">
+                    DP minimum kurang {formatIDR(dpShortfall(payTarget))}.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="text-label mb-1" style={{ display: 'block' }}>Nominal Pembayaran (Rp):</label>
                 <Input
@@ -760,6 +825,9 @@ export default function CheckInOutCenter() {
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                 />
+                <p className="text-caption text-ink-500 mt-1">
+                  Sisa tagihan {formatIDR(calculateRemaining(payTarget))}.
+                </p>
               </div>
 
               <div>
@@ -862,6 +930,21 @@ export default function CheckInOutCenter() {
                     <span>Menunggu Verifikasi</span>
                     <span className="text-body-strong" style={{ color: 'var(--warning-fg)' }}>
                       {formatIDR(calculatePending(selectedBooking))}
+                    </span>
+                  </div>
+                )}
+                {Number(selectedBooking.dp_min_amount ?? 0) > 0 && (
+                  <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>DP Minimum</span>
+                    <span
+                      className="text-body-strong"
+                      style={{ color: dpShortfall(selectedBooking) > 0 ? 'var(--warning-fg)' : '#15803d' }}
+                    >
+                      {formatIDR(Number(selectedBooking.dp_min_amount))}
+                      {' \u00b7 '}
+                      {dpShortfall(selectedBooking) > 0
+                        ? `kurang ${formatIDR(dpShortfall(selectedBooking))}`
+                        : 'terpenuhi'}
                     </span>
                   </div>
                 )}

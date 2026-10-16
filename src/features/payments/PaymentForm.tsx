@@ -22,6 +22,10 @@ interface BookingOption {
   total_price: number;
   invoice?: { total: number; status: string };
   payments?: BookingPayment[];
+  // Ambang DP dari backend (settings.min_dp_percentage x tagihan) - dipakai untuk mengisi
+  // nominal DP otomatis, bukan ditebak di layar ini.
+  dp_min_amount?: number;
+  dp_shortfall?: number;
 }
 
 import { useSearchParams } from 'react-router-dom';
@@ -73,6 +77,25 @@ export default function PaymentForm() {
       const rem = getAvailableRemaining(match);
       setRemaining(rem);
       setAmount(String(rem > 0 ? rem : Number(match.invoice?.total ?? match.total_price) || 0));
+    }
+  };
+
+  /**
+   * Ganti jenis pembayaran: DP mengisi nominal sebesar kekurangan ambang minimum hotel,
+   * pelunasan mengisi seluruh sisa. Kasir tetap boleh mengubah angkanya.
+   */
+  const handleTypeChange = (type: string) => {
+    setPaymentType(type);
+
+    if (!selectedBooking) return;
+
+    const sisa = Math.max(availableRemaining ?? 0, 0);
+    const kurang = Number(selectedBooking.dp_shortfall ?? 0);
+
+    if (type === 'dp' && kurang > 0 && kurang < sisa) {
+      setAmount(String(kurang));
+    } else if (type === 'final') {
+      setAmount(String(sisa));
     }
   };
 
@@ -194,7 +217,7 @@ export default function PaymentForm() {
                   name="type" 
                   value="dp" 
                   checked={paymentType === 'dp'}
-                  onChange={e => setPaymentType(e.target.value)}
+                  onChange={e => handleTypeChange(e.target.value)}
                 />
                 <span>Down Payment (DP)</span>
               </label>
@@ -204,7 +227,7 @@ export default function PaymentForm() {
                   name="type" 
                   value="final" 
                   checked={paymentType === 'final'}
-                  onChange={e => setPaymentType(e.target.value)}
+                  onChange={e => handleTypeChange(e.target.value)}
                 />
                 <span>Pelunasan (Final)</span>
               </label>

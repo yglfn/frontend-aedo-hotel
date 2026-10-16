@@ -63,7 +63,10 @@ export default function NewBooking() {
   const [discountAmount, setDiscountAmount] = useState('0');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('pay_later');
+  // 'full' = tagih seluruh sisa, 'dp' = tagih uang muka sebesar ambang minimum hotel.
+  const [collectionMode, setCollectionMode] = useState<'full' | 'dp'>('full');
   const [taxPercentage, setTaxPercentage] = useState<number>(11);
+  const [minDpPercentage, setMinDpPercentage] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [paymentInfo, setPaymentInfo] = useState<{
@@ -92,16 +95,20 @@ export default function NewBooking() {
   // transaction_id Midtrans yang sudah pernah diberitahukan (dipakai ulang oleh retry/poll)
   const providerRefRef = useRef<string | null>(null);
 
-  // Ambil pengaturan pajak hotel dari backend
+  // Ambil pengaturan pajak & ambang DP hotel dari backend
   useEffect(() => {
     const fetchHotelSettings = async () => {
       try {
         const res = await api.get('/api/v1/settings');
-        if (res.data?.data?.tax_percentage !== undefined) {
-          setTaxPercentage(Number(res.data.data.tax_percentage));
+        const data = res.data?.data;
+        if (data?.tax_percentage !== undefined) {
+          setTaxPercentage(Number(data.tax_percentage));
+        }
+        if (data?.min_dp_percentage !== undefined) {
+          setMinDpPercentage(Number(data.min_dp_percentage));
         }
       } catch (err) {
-        console.error('Failed to load hotel tax settings', err);
+        console.error('Failed to load hotel settings', err);
       }
     };
     fetchHotelSettings();
@@ -226,6 +233,9 @@ export default function NewBooking() {
         try {
           const payRes = await api.post(`/api/v1/bookings/${createdBooking.id}/payments/gateway`, {
             channel: paymentMethod,
+            // Nominal dihitung backend dari tagihan yang sebenarnya (sisa atau ambang DP),
+            // bukan dari estimasi di layar ini.
+            ...(collectionMode === 'dp' ? { type: 'dp' } : {}),
           });
           const info = payRes.data?.payment_info;
           setGatewayState('pending');
@@ -616,14 +626,44 @@ export default function NewBooking() {
                 onChange={e => setDiscountAmount(e.target.value)}
               />
               <div className="form-group full-width">
-                <label className="text-label">Metode Pembayaran (Otomatis DP/Lunas)</label>
+                <label className="text-label">Metode Pembayaran</label>
                 <select className="ui-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
                   <option value="pay_later">Bayar Nanti (Pay at Hotel / Transfer Manual)</option>
                   <option value="auto">Payment Gateway Midtrans (tamu pilih metodenya sendiri)</option>
                 </select>
+
+                {paymentMethod !== 'pay_later' && minDpPercentage > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    <Button
+                      size="sm"
+                      variant={collectionMode === 'full' ? 'primary' : 'secondary'}
+                      onClick={() => setCollectionMode('full')}
+                    >
+                      Bayar Lunas
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={collectionMode === 'dp' ? 'primary' : 'secondary'}
+                      onClick={() => setCollectionMode('dp')}
+                    >
+                      DP {minDpPercentage}%
+                    </Button>
+                  </div>
+                )}
+
                 <p className="text-body-small text-ink-500 mt-1">
-                  Popup Midtrans terbuka otomatis; tamu memilih metode bayar di sana.
+                  {paymentMethod === 'pay_later'
+                    ? 'Tamu bayar di meja atau transfer; status mengikuti verifikasi.'
+                    : paymentMethod !== 'pay_later' && minDpPercentage > 0 && collectionMode === 'dp'
+                      ? `Uang muka ${minDpPercentage}% ditagih sekarang, sisanya saat check-out.`
+                      : 'Popup Midtrans terbuka otomatis; tamu memilih metode bayar di sana.'}
                 </p>
+
+                {paymentMethod !== 'pay_later' && minDpPercentage <= 0 && collectionMode === 'full' && (
+                  <p className="text-caption text-ink-500 mt-1">
+                    Ingin menagih uang muka? Isi "Minimal DP (%)" di Pengaturan.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -655,6 +695,12 @@ export default function NewBooking() {
                 <span>Estimasi Total</span>
                 <span className="text-h3 text-primary-600">{formatIDR(estTotal)}</span>
               </div>
+              {paymentMethod !== 'pay_later' && minDpPercentage > 0 && (
+                <div className="summary-row">
+                  <span>{collectionMode === 'dp' ? `Ditagih sekarang (DP ${minDpPercentage}%)` : 'Ditagih sekarang'}</span>
+                  <strong>{formatIDR(collectionMode === 'dp' ? Math.round((estTotal * minDpPercentage) / 100) : estTotal)}</strong>
+                </div>
+              )}
             </div>
 
             {submitError && (

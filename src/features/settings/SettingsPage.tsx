@@ -195,7 +195,7 @@ export default function SettingsPage() {
               max="100"
               value={settings.min_dp_percentage}
               onChange={(e) => setSettings({ ...settings, min_dp_percentage: e.target.value })}
-              hint="0 = tidak wajib DP. Di atas 0: DP harus lunas sebelum reservasi bisa dikonfirmasi."
+              hint="0 = tidak wajib DP. Di atas 0: ini ambang cek-in sekaligus nominal default saat memilih DP di Midtrans/meja."
               required
             />
             <Input
