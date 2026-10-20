@@ -10,9 +10,9 @@ export interface User {
 
 export type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
 export type RoomStatus = 'available' | 'booked' | 'occupied' | 'cleaning' | 'maintenance';
-export type PaymentMethod = 'cash' | 'transfer' | 'qris' | 'payment_gateway';
+export type PaymentMethod = 'cash' | 'transfer' | 'qris';
 export type PaymentType = 'dp' | 'final' | 'refund';
-export type PaymentStatus = 'pending' | 'verified' | 'failed' | 'expired';
+export type PaymentStatus = 'pending' | 'verified' | 'failed';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void';
 export type HousekeepingTaskStatus = 'pending' | 'in_progress' | 'completed';
 export type MaintenanceStatus = 'reported' | 'in_progress' | 'resolved';

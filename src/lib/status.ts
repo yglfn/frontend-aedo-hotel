@@ -27,14 +27,12 @@ export const paymentStatus: Record<PaymentStatus, StatusDef> = {
   pending: { label: 'Menunggu', color: 'warning' },
   verified: { label: 'Terverifikasi', color: 'success' },
   failed: { label: 'Gagal', color: 'danger' },
-  expired: { label: 'Kedaluwarsa', color: 'neutral' },
 };
 
 export const paymentMethod: Record<PaymentMethod, StatusDef> = {
   cash: { label: 'Tunai', color: 'neutral' },
   transfer: { label: 'Transfer', color: 'neutral' },
   qris: { label: 'QRIS', color: 'neutral' },
-  payment_gateway: { label: 'Gateway', color: 'neutral' },
 };
 
 export const paymentType: Record<PaymentType, StatusDef> = {

@@ -1,10 +1,23 @@
 import { NavLink } from 'react-router-dom';
 import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck, BedDouble } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { confirmDialog } from '../ui/ConfirmDialog';
 import './Sidebar.css';
 
 export function Sidebar() {
   const { isAdmin, logout, hotelSettings } = useAuth();
+
+  // Keluar menutup sesi secara total, jadi selalu lewat konfirmasi
+  const handleLogout = async () => {
+    const leave = await confirmDialog({
+      title: 'Keluar dari Sistem?',
+      message: 'Sesi login ditutup dan Anda kembali ke halaman masuk.',
+      confirmLabel: 'Ya, Keluar',
+      tone: 'danger',
+    });
+    if (!leave) return;
+    await logout();
+  };
 
   // Berdasarkan AGENTS.md Bagian 3:
   // Admin: Akses semua menu
@@ -55,7 +68,7 @@ export function Sidebar() {
         )}
         <button
           className="sidebar-item sidebar-logout"
-          onClick={logout}
+          onClick={handleLogout}
         >
           <span className="sidebar-item-icon"><LogOut size={20} /></span>
           <span className="sidebar-item-label">Keluar</span>

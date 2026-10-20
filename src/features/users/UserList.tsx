@@ -7,6 +7,7 @@ import { Drawer } from '../../components/ui/Drawer';
 import { Modal } from '../../components/ui/Modal';
 import { StatusBadge, Chip } from '../../components/ui/StatusBadge';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
+import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import type { Role } from '../../types';
 import { formatDateShort } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
@@ -187,6 +188,23 @@ export default function UserList() {
   };
 
   const handleToggleActive = async (u: StaffUser) => {
+    // Menonaktifkan akun mencabut sesi login yang sedang berjalan
+    const sure = await confirmDialog(
+      u.is_active
+        ? {
+            title: 'Nonaktifkan Akun?',
+            message: `${u.name} tidak dapat login lagi.\n\nSesi dan token yang masih aktif ikut dicabut.`,
+            confirmLabel: 'Nonaktifkan',
+            tone: 'danger',
+          }
+        : {
+            title: 'Aktifkan Akun?',
+            message: `${u.name} dapat login ke sistem kembali.`,
+            confirmLabel: 'Aktifkan',
+          }
+    );
+    if (!sure) return;
+
     const endpoint = u.is_active
       ? `/api/v1/users/${u.id}/deactivate`
       : `/api/v1/users/${u.id}/activate`;
@@ -504,9 +522,6 @@ export default function UserList() {
             Hapus akun <strong>{deletingUser?.name}</strong> ({deletingUser?.email})?
           </p>
           <p className="text-caption">
-            Akun yang sudah punya jejak operasional (reservasi, pembayaran, shift, housekeeping,
-            maintenance) tidak akan dihapus — sistem akan menolaknya dan Anda cukup menonaktifkan akun
-            tersebut.
           </p>
         </div>
       </Modal>

@@ -1,0 +1,31 @@
+/* Pengaturan sistem: kontrol terkunci (fieldset[disabled]) sampai "Ubah Pengaturan" ditekan */
+.settings-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Mode baca: nilai tetap enak dibaca, hanya tidak bisa diketik */
+.settings-fields[disabled] .input-field,
+.settings-fields[disabled] textarea,
+.settings-fields[disabled] select {
+  background-color: var(--surface-muted);
+  color: var(--ink-700);
+  cursor: default;
+}
+
+/* Tanda wajib tidak relevan saat masih terkunci */
+.settings-fields[disabled] .input-required {
+  display: none;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}

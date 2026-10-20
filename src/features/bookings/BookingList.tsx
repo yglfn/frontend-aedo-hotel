@@ -11,7 +11,6 @@ import { Drawer } from '../../components/ui/Drawer';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import { formatIDR, formatDateShort } from '../../lib/format';
-import { syncPendingGatewayPayments } from '../../lib/gatewaySync';
 import { useAuth } from '../../context/AuthContext';
 import type { BookingStatus } from '../../types';
 import './BookingList.css';
@@ -99,10 +98,6 @@ export default function CheckInOutCenter() {
     try {
       setIsLoading(true);
 
-      // Status bayar reservasi mengikuti kenyataan di gateway, bukan menunggu tombol
-      // "Cek Status" ditekan (di dev tidak ada cron dan webhook tidak selalu bisa masuk)
-      await syncPendingGatewayPayments();
-
       const params = new URLSearchParams({ per_page: '100' });
       if (TAB_STATUS[activeTab]) params.set('status', TAB_STATUS[activeTab]);
       if (search.trim()) params.set('search', search.trim());
@@ -152,12 +147,10 @@ export default function CheckInOutCenter() {
     return Math.max(0, calculateTotal(b) - calculatePaid(b) - calculatePending(b));
   };
 
-  /** true bila ada transfer/QRIS manual menunggu verifikasi admin -> jangan menagih lagi */
+  /** true bila ada pembayaran menunggu verifikasi admin -> jangan menagih lagi */
   const blockedByPendingPayment = (b: Booking) => {
     if (typeof b.blocks_manual_payment === 'boolean') return b.blocks_manual_payment;
-    return (b.payments || []).some(
-      (p) => p.status === 'pending' && p.method !== 'payment_gateway'
-    );
+    return (b.payments || []).some((p) => p.status === 'pending');
   };
 
   /**
@@ -262,11 +255,9 @@ export default function CheckInOutCenter() {
     }
   };
 
-  /** Verifikasi payment manual yang pending, langsung dari layar check-in (admin only) */
+  /** Verifikasi pembayaran yang pending, langsung dari layar check-in (admin only) */
   const verifyPendingPayments = async (b: Booking): Promise<boolean> => {
-    const pending = (b.payments || []).filter(
-      (p) => p.status === 'pending' && p.method !== 'payment_gateway'
-    );
+    const pending = (b.payments || []).filter((p) => p.status === 'pending');
 
     try {
       for (const payment of pending) {

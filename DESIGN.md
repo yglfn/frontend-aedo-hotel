@@ -128,8 +128,8 @@ Gunakan satu komponen `<StatusBadge type="booking" value="checked_in" />` yang m
 | `cleaning` | Sedang Dibersihkan | warning |
 | `maintenance` | Perbaikan | danger |
 
-**`payment.status`**: `pending` → warning, `verified` → success, `failed` → danger, `expired` → neutral
-**`payment.method`**: `cash` Tunai, `transfer` Transfer, `qris` QRIS, `payment_gateway` Gateway (chip netral dengan ikon)
+**`payment.status`**: `pending` → warning, `verified` → success, `failed` → danger
+**`payment.method`**: `cash` Tunai, `transfer` Transfer, `qris` QRIS (chip netral dengan ikon)
 **`payment.type`**: `dp` DP, `final` Pelunasan, `refund` Refund (chip netral; refund → danger)
 **`invoice.status`**: `draft` neutral, `sent` info, `paid` success, `void` danger
 **`housekeeping_task.status`**: `pending` warning, `in_progress` info, `completed` success
@@ -223,7 +223,6 @@ Aturan: maksimal 3 ukuran berbeda dalam satu kartu. Jangan pakai `text-xs` untuk
 | Pengguna | ✅ | ❌ |
 | Laporan | ✅ | ❌ |
 | Review | ✅ | ❌ |
-| Log Gateway | ✅ | ❌ |
 | Pengaturan | ✅ | ❌ |
 
 Menu yang tidak boleh diakses **disembunyikan**, bukan di-disable. Tetap lindungi route (redirect + halaman 403 bila diakses langsung).
@@ -349,7 +348,7 @@ Dua kolom di desktop: kiri form (email, password, tombol "Masuk"), kanan panel `
 - Ringkasan invoice (subtotal, diskon, pajak, total, terbayar, sisa) dengan angka besar untuk **Sisa tagihan**.
 - Form catat pembayaran: nominal, metode, tipe, catatan. Validasi: tidak melebihi total (error 422 dari API ditampilkan).
 - Transfer: status `pending`, area unggah bukti (drag & drop, pratinjau gambar, batas ukuran jelas), admin melihat tombol "Verifikasi".
-- Gateway: pilih channel (QRIS/VA/E-wallet) → tampilkan QR/instruksi, hitung mundur `expires_at`, polling status ringan. Beri label "Mode simulator" selama sandbox.
+- Tidak ada payment gateway: tidak ada QR/VA yang dibuat sistem, tidak ada hitung mundur `expires_at`, dan tidak ada polling status. Semua pembayaran dicatat staf; status berubah lewat auto-verify atau verifikasi admin.
 - Unduh PDF invoice via `GET /invoices/{id}/pdf` (blob).
 
 ### 6.5 Housekeeping & Maintenance

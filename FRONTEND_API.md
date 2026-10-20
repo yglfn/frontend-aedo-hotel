@@ -100,7 +100,7 @@ Hanya ada **2 role**:
 - CRUD users (pegawai)
 - CRUD tipe kamar, kamar, layanan
 - Verifikasi pembayaran transfer
-- Lihat log gateway, payment pending/expired
+- Lihat payment pending
 - Laporan & export PDF/Excel
 - Pengaturan sistem
 
@@ -180,13 +180,13 @@ Hanya ada **2 role**:
 | `maintenance` | Perbaikan |
 
 ### `payment.method`
-`cash` | `transfer` | `qris` | `payment_gateway`
+`cash` | `transfer` | `qris`
 
 ### `payment.type`
 `dp` | `final` | `refund`
 
 ### `payment.status`
-`pending` | `verified` | `failed` | `expired`
+`pending` | `verified` | `failed`
 
 ### `invoice.status`
 `draft` | `sent` | `paid` | `void`
@@ -244,12 +244,12 @@ Semua aksi akun (create/update/activate/deactivate/password reset/delete) dituli
 | `GET` | `/api/v1/settings` | Publik | Branding + jam operasional + pajak (hanya field aman; dipakai halaman login) |
 | `PUT` | `/api/v1/settings` | Admin | Update pengaturan; perubahan tercatat di audit log |
 
-`payment_gateway_config` bersifat **write-only**: nilainya dienkripsi di database dan tidak pernah
-dikembalikan oleh endpoint mana pun. `payment_gateway_provider` boleh dibaca, konfigurasinya tidak.
+Tidak ada konfigurasi payment gateway di `settings` — fiturnya sudah dihapus, dan endpoint ini
+tidak lagi menerima atau mengembalikan field kredensial apa pun.
 
 Field kendali alur pembayaran: `min_dp_percentage` (ambang uang muka: DP terverifikasi sebesar ini
 membuat booking `confirmed`/boleh check-in, 0 = tidak memaksa; sekaligus **nominal default** saat kasir
-atau tamu memilih "DP" di gateway/meja), `auto_verify_transfers` (verifikasi otomatis transfer/QRIS),
+memilih "DP" di meja), `auto_verify_transfers` (verifikasi otomatis transfer/QRIS),
 dan `auto_verify_max_amount` (plafon nilai yang boleh diverifikasi otomatis; 0 = tanpa plafon).
 
 **Response settings:**
@@ -264,8 +264,7 @@ dan `auto_verify_max_amount` (plafon nilai yang boleh diverifikasi otomatis; 0 =
     "tax_percentage": "11.00",
     "min_dp_percentage": "0.00",
     "auto_verify_transfers": true,
-    "auto_verify_max_amount": "0.00",
-    "payment_expiry_minutes": 60
+    "auto_verify_max_amount": "0.00"
   }
 }
 ```
@@ -430,15 +429,14 @@ GET /api/v1/rooms/availability?check_in=2026-11-01&check_out=2026-11-03
 > `dp_min_amount` = `min_dp_percentage` × tagihan; `dp_shortfall` = sisa kekurangan DP terhadap ambang
 > itu (0 bila sudah terpenuhi atau tidak diwajibkan). Frontend memakainya untuk mengisi nominal
 > DP otomatis dan menampilkan status DP — angkanya tidak dihitung ulang di browser.
-> `blocks_manual_payment` = true bila ada transfer/QRIS **manual** berstatus pending.
+> `blocks_manual_payment` = true bila ada payment berstatus pending.
 
 **Aturan check-in, bayar, dan konfirmasi:**
 
 | Keadaan reservasi | Yang ditampilkan / diizinkan |
 |---|---|
 | `pending`, belum ada payment | "Bayar & Check-In" (tunai/DP di meja) |
-| payment manual `pending` | "Menunggu Verifikasi" — penagihan baru ditolak 422; admin bisa verifikasi lalu lanjut check-in |
-| QR gateway `pending` | Penagihan manual masih boleh (QR bisa kedaluwarsa) |
+| payment `pending` | "Menunggu Verifikasi" — penagihan baru ditolak 422; admin bisa verifikasi lalu lanjut check-in |
 | DP terverifikasi ≥ ambang, status `pending` | "Konfirmasi & Check-In" (otomatis `confirmed` oleh backend begitu ambang tercapai) |
 | `confirmed` | "Check-In" langsung |
 
@@ -466,7 +464,7 @@ GET /api/v1/rooms/availability?check_in=2026-11-01&check_out=2026-11-03
 > - Check-out ditolak jika tagihan belum lunas → HTTP 422
 > - Booking berstatus `checked_in`/`checked_out`/`cancelled` tidak bisa dibatalkan lagi → HTTP 422
 > - Check-in **wajib** status `confirmed` → HTTP 422 dengan pesan sebabnya
-> - Selama masih ada pembayaran manual `pending`, payment baru (manual/gateway) ditolak → HTTP 422
+> - Selama masih ada pembayaran `pending`, payment baru ditolak → HTTP 422
 > - Batal menghapus tagihan: invoice aktif otomatis berubah menjadi `void`
 
 ---
@@ -522,10 +520,6 @@ GET /api/v1/rooms/availability?check_in=2026-11-01&check_out=2026-11-03
 | `POST` | `/api/v1/payments/{id}/proof` | Semua | Upload bukti transfer (jpg/png/pdf maks 5 MB) |
 | `PATCH` | `/api/v1/payments/{id}/verify` | **Admin only** | Verifikasi manual (dipakai hanya bila aturan otomatis tidak terpenuhi) |
 | `POST` | `/api/v1/payments/{id}/reverse` | **Admin only** | Pembatalan (reversal) pembayaran yang sudah verified, wajib `reason` — kontrol post-audit |
-| `POST` | `/api/v1/payments/{id}/sync` | Semua | Tanya status transaksi ke gateway (pemulihan webhook yang hilang). Body opsional `transaction_id` = transaction_id Midtrans yang dibawa callback Snap JS / URL redirect; ia hanya petunjuk, keputusan tetap dari gateway. Field balik: `gateway_status`, `gateway_found`, `payment_status`, `changed`. `gateway_found=false` = transaksi belum tercatat di gateway; `message` berisi alasannya |
-| `POST` | `/api/v1/payments/sync-pending` | Semua | Sinkronkan SEMUA payment gateway yang masih pending ke gateway (dipanggil otomatis saat halaman Daftar Pembayaran & Reservasi dibuka, dijeda ≥30 detik + `throttle:6,1`). Kandidat id yang ditanyakan: order_id -> transaction_id provider yang diingat -> token Snap (jalur ini yang membuat DANA/GoPay ikut terverifikasi). Urutannya seperti scheduler: tanya status dulu, baru tandai melewati batas waktu. Field balik: `changed` (jumlah payment yang statusnya bergerak), `expired`, `message` |
-| `GET` | `/api/payment-result/{order_id}` | **Publik (tanpa login)** | Halaman hasil untuk tamu; dituju oleh `callbacks.finish` Midtrans. Membaca status dari database kami dan, bila masih pending, menanya gateway sekali — parameter `?status=` di URL **tidak pernah** dipercaya. Respons hanya `booking_code`, `amount`, `payment_status`, `booking_status`, `paid_at`, `provider`, `environment`, `message` (tanpa nama/telepon/KTP). Throttle 20/menit |
-| `POST` | `/api/v1/bookings/{id}/payments/gateway` | Semua* | Buat permintaan gateway. Body `channel`: **`auto`** (default — Midtrans menampilkan semua metode yang aktif di Merchant Account, tamu memilih sendiri di popup), atau paksa satu kanal: `qris` / `va` / `ewallet`. Body `type`: `final` (default, tagih seluruh sisa) atau **`dp`** (uang muka). Body `amount` (opsional): nominal eksplisit; tanpa ini DP = `dp_min_amount` dan final = `remaining_due`. Ditolak 422 bila `amount` ≤ 0, melebihi sisa tagihan, saat sisa sudah 0, atau saat ada pembayaran manual menunggu verifikasi. Response `payment_info`: `transaction_id` (order id kita), `token`, `redirect_url`, `qr_string`, `snap_js_url`, `client_key`, `amount` (sebesar yang benar-benar ditagihkan), `environment` (sandbox/production). `token` + `snap_js_url` + `client_key` dipakai frontend untuk membuka halaman bayar otomatis lewat Snap.js (client key publik; server key tidak pernah dikirim ke browser). Satu tagihan gateway aktif per invoice: tautan Snap/QR/VA yang masih pending dan belum kedaluwarsa otomatis ditandai `expired` ("Digantikan tagihan gateway baru") |
 
 **Aturan verifikasi otomatis (pengganti approval admin):**
 
@@ -533,14 +527,18 @@ GET /api/v1/rooms/availability?check_in=2026-11-01&check_out=2026-11-03
 |---|---|
 | Tunai | Langsung saat dicatat (kasir + shift = akuntabilitasnya) |
 | Transfer / QRIS manual | Otomatis bila `auto_verify_transfers` aktif **dan** nomor referensi terisi unik (belum pernah dipakai payment lain) **dan** bukti terunggah **dan** nominal tidak membuat verified+pending melebihi tagihan **dan** tidak melewati `auto_verify_max_amount`. Kalau ada satu syarat kurang → tetap `pending`, butuh approve admin |
-| Payment gateway | Otomatis dari webhook bertanda tangan, dari `POST /payments/{id}/sync`, dari `POST /payments/sync-pending` saat halaman dibuka, saat check-in/check-out (rekonsiliasi per reservasi), atau dari scheduler (sync dulu, baru expired). Tidak pernah atas dasar pengakuan pengguna sistem |
 
-Setiap keputusan otomatis ditulis ke `audit_logs` (`payment.auto_verified`, `payment.gateway_verified`)
+Setiap keputusan otomatis ditulis ke `audit_logs` (`payment.auto_verified`)
 dengan `verified_by = NULL` sebagai penanda "sistem". Admin tetap bisa membatalkan lewat `reverse`
 selama tamu belum check-out/batal.
 
-> \*) **Pegawai wajib punya shift berjalan** untuk mencatat pembayaran (manual maupun gateway).
-> Tanpa shift, kedua endpoint itu membalas **403** dengan pesan
+> **Tidak ada payment gateway.** Semua pembayaran masuk lewat `POST /api/v1/bookings/{id}/payments`
+> (tunai/transfer/QRIS) dan dinilai oleh aturan di atas. Tidak ada endpoint `.../payments/gateway`,
+> `.../sync`, `sync-pending`, `payment-result`, webhook, maupun sandbox bayar.
+> Status `expired` juga tidak dipakai lagi — pembayaran yang tidak selesai ditolak admin (`failed`).
+
+> \*) **Pegawai wajib punya shift berjalan** untuk mencatat pembayaran.
+> Tanpa shift, endpoint itu membalas **403** dengan pesan
 > "Anda harus memulai shift terlebih dahulu sebelum mencatat transaksi."
 
 **Body catat pembayaran:**
@@ -558,24 +556,6 @@ selama tamu belum check-out/batal.
 > - `transfer` → status `pending`, perlu upload bukti, verifikasi admin
 > - Tidak bisa melebihi total invoice (`HTTP 422`)
 
-**Body buat pembayaran gateway:**
-```json
-{ "channel": "qris" }
-```
-> Channel yang tersedia: `qris` | `va` | `ewallet`
-
-**Response gateway payment:**
-```json
-{
-  "data": { "id": 5, "gateway_transaction_id": "SIM-ABCDEF123456", "expires_at": "..." },
-  "payment_info": {
-    "qr_string": "SIMULATOR_QR_SIM-ABCDEF123456_AMOUNT_777000",
-    "transaction_id": "SIM-ABCDEF123456",
-    "amount": 777000
-  }
-}
-```
-
 **Upload bukti transfer:**
 ```ts
 const formData = new FormData()
@@ -587,71 +567,7 @@ await axios.post(`/api/v1/payments/${paymentId}/proof`, formData, {
 
 ---
 
-### 6.12 Webhook Gateway (PUBLIK)
-
-| Method | URL | Auth | Deskripsi |
-|---|---|---|---|
-| `POST` | `/api/webhooks/payment-gateway` | ❌ Tidak perlu | Callback dari payment gateway |
-
-**Kontrak payload (divalidasi ketat):**
-
-```json
-{
-  "transaction_id": "SIM-AB12CD34EF56",
-  "event": "payment.settled",
-  "status": "paid",
-  "amount": 388500.00
-}
-```
-
-| Aturan | Perilaku kalau dilanggar |
-|---|---|
-| Header `X-Simulator-Signature` wajib HMAC-SHA256 atas badan **raw** (kanonik `"<timestamp>.<body>"` bila `X-Simulator-Timestamp` dikirim) | `401 { "status": "rejected" }`, payment tetap `pending`, log tersimpan dengan `signature_valid=false` + `payment_id` (untuk forensik) |
-| `X-Simulator-Timestamp` harus berusia ≤ 5 menit | `401` — penahan replay dari webhook yang tertangkap/disimpan |
-| `amount` wajib **sama persis** dengan `payments.amount` (toleransi Rp 0,01) | `422 { "status": "amount_mismatch" }`, status tidak diubah |
-| `transaction_id` tidak dikenal | `200 { "status": "ignored" }` |
-| Webhook datang dua kali untuk transaksi yang sudah lunas | `200 { "status": "skipped" }` (idempoten: `paid_at` & audit tidak berubah) |
-| Settlement tiba setelah QR `expired`/`failed` | Tetap diproses `verified` + catatan "perlu rekonsiliasi admin" di `notes` |
-
-Semua yang masuk — valid maupun ditolak — tercatat di `payment_gateway_logs`.
-
-> **Catatan frontend:** endpoint ini untuk gateway, bukan untuk dipanggil aplikasi. Kalau butuh mensimulasikan
-> pembayaran saat demo, pakai endpoint sandbox di bagian 6.14.
-
----
-
-### 6.13 Log Gateway (Admin only)
-
-| Method | URL | Deskripsi |
-|---|---|---|
-| `GET` | `/api/v1/payment-gateway-logs` | Lihat semua log webhook |
-
-Query params: `?provider=simulator&processed=true&signature_valid=false`
-
----
-
-### 6.14 Sandbox Payment Gateway (non-produksi)
-
-Meniru provider asli: endpoint ini hanya **mengirim webhook bertanda tangan yang sah** ke jalur
-pembayaran normal — jadi cek signature, kecocokan nominal, dan idempotensi tetap berlaku.
-
-| Method | URL | Akses | Deskripsi |
-|---|---|---|---|
-| `POST` | `/api/v1/sandbox/gateway/{transactionId}/pay` | Login staf | Dipakai tombol "Bayar (Sandbox)" di halaman Pembayaran |
-| `POST` | `/api/sandbox/gateway/{transactionId}/pay` | Header `X-Sandbox-Token` | Untuk Postman/cURL (token = `PG_SIMULATOR_SECRET`) |
-
-Body opsional: `amount` (default = nominal tagihan; kirim nilai lain untuk menguji penolakan),
-`status` (`paid` default, `expire`, `cancel`).
-
-Response: `webhook_status` (`processed`/`skipped`/`amount_mismatch`/`rejected`/`ignored`),
-`payment_status`, `booking_status`, `invoice_status`.
-
-Pengaman: `404` bila `APP_ENV=production` atau provider aktif bukan simulator/sandbox, `401` bila tidak
-login dan token salah, `throttle:30,1`, dan secret sandbox tidak pernah dikirim ke frontend.
-
----
-
-### 6.14 Housekeeping
+### 6.12 Housekeeping
 
 | Method | URL | Akses | Deskripsi |
 |---|---|---|---|
@@ -670,7 +586,7 @@ login dan token salah, `throttle:30,1`, dan secret sandbox tidak pernah dikirim 
 
 ---
 
-### 6.15 Maintenance
+### 6.13 Maintenance
 
 | Method | URL | Akses | Deskripsi |
 |---|---|---|---|
@@ -682,7 +598,7 @@ login dan token salah, `throttle:30,1`, dan secret sandbox tidak pernah dikirim 
 
 ---
 
-### 6.16 Review
+### 6.14 Review
 
 | Method | URL | Akses | Deskripsi |
 |---|---|---|---|
@@ -699,7 +615,7 @@ login dan token salah, `throttle:30,1`, dan secret sandbox tidak pernah dikirim 
 
 ---
 
-### 6.17 Laporan (Admin only)
+### 6.15 Laporan (Admin only)
 
 Semua laporan mendukung parameter:
 - `?from=2026-11-01&to=2026-11-30` — filter periode
@@ -753,8 +669,7 @@ Invoice: draft (otomatis dibuat)
 POST /bookings/{id}/services
 
 [Bayar]
-POST /bookings/{id}/payments  ← cash/transfer
-POST /bookings/{id}/payments/gateway  ← QRIS/VA
+POST /bookings/{id}/payments  ← cash / transfer / qris (dicatat staf)
 
 [Check-In]
 POST /bookings/{id}/check-in
@@ -784,238 +699,21 @@ PATCH /payments/{id}/verify  ← Admin verifikasi
 ↓ Jika lunas → Invoice: paid
 ```
 
-### Alur Gateway Payment
-
-```
-POST /bookings/{id}/payments/gateway  { channel: "qris" }
-↓ Tampilkan QR ke tamu
-
-[Tamu bayar]
-
-POST /api/webhooks/payment-gateway  ← Dikirim gateway (otomatis)
-↓ Signature diverifikasi
-↓ Payment: verified
-↓ Invoice: paid (jika lunas)
-```
-
 ---
 
-### 7.1 Memakai Midtrans Sandbox (provider asli)
+### 7.1 Uang muka (DP) di meja
 
-Backend sudah punya `MidtransGateway` (Snap API) dan sudah **diuji langsung ke server Midtrans sandbox**.
-Untuk pindah dari simulator lokal ke Midtrans sandbox:
-
-1. Daftar Merchant Account Midtrans, buka **My Settings → Access Keys**, aktifkan kanal yang dipakai
-   (QRIS / BCA VA / DANA) di **Payment Channels**.
-2. Isi `.env`:
-   ```dotenv
-   PG_PROVIDER=midtrans
-   PG_MIDTRANS_SERVER_KEY=Mid-server-xxxxxxxx
-   PG_MIDTRANS_CLIENT_KEY=Mid-client-xxxxxxxx
-   PG_MIDTRANS_IS_PRODUCTION=false
-   ```
-   Prefiks kunci **tidak** dipakai untuk menentukan environment: Midtrans punya lebih dari satu gaya
-   penamaan sandbox key (`SB-Mid-server-…` dan `Mid-server-…`), jadi yang dipakai adalah flag
-   `PG_MIDTRANS_IS_PRODUCTION` dan jawabannya diverifikasi dengan perintah nyata ke Midtrans:
-   ```bash
-   php artisan payment:test-connection
-   ```
-   `ok=true` berarti kunci diterima di environment itu. HTTP 401/403 = kunci/environment salah;
-   HTTP 404 = endpoint lookup memang tidak ada di host tersebut.
-3. **Midtrans memisahkan host dan memisahkan ledger** (hasil verifikasi langsung, penting saat debugging):
-
-   | Kebutuhan | Sandbox | Production |
-   |---|---|---|
-   | Buat transaksi + halaman bayar (Snap) | `https://app.sandbox.midtrans.com` | `https://app.midtrans.com` |
-   | Cek status lewat order_id (`/v2/{order_id}/status`) | `https://api.sandbox.midtrans.com` | `https://api.midtrans.com` |
-   | Cek status lewat token (`/snap/v1/transactions/{token}/status`) | `https://app.sandbox.midtrans.com` | `https://app.midtrans.com` |
-
-   Memanggil `/v2/...` di host `app.*` dijawab **HTTP 404** (endpoint-nya memang tidak di sana).
-   Lookup `/v2/{order_id}/status` hanya mengenal **QRIS / VA / kartu**; transaksi **e-wallet hasil
-   Snap (DANA/GoPay/Ovo)** tersimpan di bawah order_id Midtrans sendiri (`A12026...`) sehingga
-   order_id kita dijawab "Transaction doesn't exist" walaupun statusnya sudah settlement.
-   Endpoint token Snap mengenalinya dan mengembalikan order_id kita - itu jalur otomatis untuk
-   e-wallet.
-4. Set **Notification URL** di Midtrans ke `https://<domain-anda>/api/webhooks/payment-gateway`.
-   Lokal butuh HTTPS tunnel (ngrok/cloudflared) supaya Midtrans bisa mengirim callback.
-5. **Tanpa tunnel tetap bisa uji end-to-end**, karena sistem punya jalur pemulihan status:
-   1. Buat pembayaran gateway → buka `redirect_url` Midtrans di browser (halaman Snap sandbox) dan
-      selesaikan pembayarannya memakai simulator pembayaran Midtrans.
-   2. Setelah tamu membuka/membayar, transaksi baru **tercatat di ledger Midtrans**. Tekan
-      **Cek Status** (`POST /api/v1/payments/{id}/sync`) — sistem menanyakan `/v2/{order_id}/status`,
-      dan kalau `settlement` maka payment jadi `verified`, invoice lunas, booking `confirmed`
-      otomatis (tanpa approval admin).
-
-      Sebelum halaman Snap dibuka, sync menjawab `gateway_found=false` dengan pesan
-      "Transaksi belum tercatat di Midtrans" — ini kondisi normal, bukan error, dan **tidak pernah**
-      dianggap lunas.
-6. **Perilaku otomatis di aplikasi (frontend `src/lib/midtransSnap.ts`):** begitu pembayaran gateway
-   dibuat, halaman bayar Midtrans **langsung tampil sendiri** memakai Snap.js
-   (`window.snap.pay(token)`) sebagai overlay di dalam aplikasi — staf tidak perlu menekan tautan.
-   Urutan cadangan: Snap.js → `window.open(redirect_url)` (tab baru) → tombol **Buka Pembayaran**
-   bila browser memblokir popup. Status lalu diikuti otomatis: setiap kali Snap.js menutup/pending
-   dan setiap 20 detik selama modal terbuka, frontend memanggil `POST /payments/{id}/sync`; ketika
-   gateway menjawab settlement, invoice lunas dan booking terkonfirmasi tanpa langkah manual.
-   Pembayaran pending yang tertinggal dapat dibuka lagi dari **Daftar Pembayaran** dengan tombol
-   yang sama. Environment (sandbox/production) tidak bisa dipilih frontend karena `snap_js_url`
-   dan `client_key` datang dari backend.
-   > Snap.js versi ini membuat `<iframe id="snap-midtrans">` di dokumen kita dan menampilkannya
-   > sebagai overlay (bukan `window.open`), jadi tidak terkena popup blocker. Opsi `pay()`
-   > **hanya** yang dikenal SDK: `onSuccess`, `onPending`, `onError`, `onClose`,
-   > `skipOrderSummary`, `autoCloseDelay`, `language`, `enabledPayments`. Mengirim key lain
-   > melempar `Error("Unsupported option ...")` dan overlay tidak muncul sama sekali — frontend
-   > kini menangkap error itu, membatasi load script dengan timeout, lalu jatuh ke tautan/tab baru
-   > dengan alasan yang ditampilkan, jadi tidak ada lagi status "menyiapkan..." yang menggantung.
-7. **Daftar metode bayar di popup = pengaturan Merchant Account, bukan kode aplikasi.**
-   `channel=auto` (default) mengirim permintaan Snap **tanpa** `enabled_payments`, jadi Midtrans
-   menampilkan QRIS, virtual account, e-wallet, kartu kredit, dan kanal lain yang aktif di
-   **Payment Enablement / kanal pembayaran** — menambah atau mematikan kanal cukup dari dashboard,
-   tanpa deploy. Sudah diuji langsung ke sandbox: transaksi `auto` diterima Midtrans dan
-   mengembalikan `token` + `redirect_url`. Bila kasir perlu memaksa satu metode, kirim
-   `channel=qris|va|ewallet`.
-8. **Pesan console yang normal terjadi (jangan diartikan aplikasi rusak).** Saat tamu membayar,
-   Snap.js memindahkan iframe-nya ke domain bank/e-wallet simulator, sehingga posting berikutnya
-   gagal:
-   `Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://app.sandbox.midtrans.com') does not match the recipient window's origin (...)`.
-   Ini perilaku SDK Midtrans di sandbox, bukan bug sistem kita — hanya berarti callback browser
-   (`onSuccess`/`onClose`) kadang tidak datang. Status tetap benar karena backend yang bertanya
-   ke gateway, lewat tiga jalur: retry 3/8/15/25 detik setelah overlay ditutup, poll tiap 20 detik
-   selama modal terbuka, dan `POST /payments/sync-pending` saat halaman Daftar Pembayaran/Reservasi
-   dibuka.
-   Catatan: transaksi **hanya tercatat di Midtrans setelah halaman Snap dibuka**. Sebelum itu
-   `/v2/{order_id}/status` menjawab `status_code:"404"`, dan sistem menampilkannya sebagai
-   "belum tercatat di gateway" (bukan lunas, bukan error).
-9. **Scheduler perlu dijalankan sendiri.** `routes/console.php` menjalankan `payment:sync --expired`
-   tiap 5 menit, tapi itu butuh cron (produksi) atau:
-   ```bash
-   php artisan schedule:work
-   ```
-   di mesin pengembangan (Laragon). Tanpa keduanya, status masih dipulihkan saat halaman dibuka
-   (butir 8), hanya tidak otomatis di latar belakang. Jalur yang sama bisa dijalankan manual:
-   ```bash
-   php artisan payment:sync            # jemput status payment gateway yang masih pending
-   php artisan payment:sync --expired  # + tandai yang lewat batas waktu sebagai expired
-   ```
-10. **Supaya tamu tidak dibuang ke `https://example.com`.** Kalau `callbacks.finish` tidak
-   dikirim, Midtrans memakai "Finish Redirect URL" di dashboard — default-nya domain contoh itu.
-   Backend kini mengirim `callbacks.finish` per transaksi, dibangun dari
-   `PG_MIDTRANS_FINISH_URL` (fallback: `FRONTEND_URL` + `/payment-result`), misalnya
-   `http://backend-aedo-hotel.test/payment-result?order_id=AEDO-XXXXXXXXXXXXXXXX`.
-   Tujuannya halaman publik [PaymentResult](frontend-aedo-hotel/src/features/payments/PaymentResult.tsx)
-   (rute `/payment-result`, tanpa login) yang menampilkan "Pembayaran Berhasil" / "Menunggu
-   Konfirmasi" dan mengulang pemeriksaan tiap 10 detik selama pending. Saat sudah berhasil tombol
-   "Cek Sekarang" tidak ditampilkan lagi - yang ada hanya **Kembali ke Sistem** (rute `/`), karena
-   tidak ada lagi yang perlu diperiksa: staf yang sedang login jatuh kembali ke dashboard, tamu
-   jatuh ke halaman masuk.
-   Catatan penting: nama kunci ini **tidak divalidasi Midtrans saat create** (request dengan kunci
-   sembarang tetap dijawab 201), jadi salah ketik = redirect diam-diam kembali ke `example.com`.
-   Host tujuan juga harus host yang benar-benar menyajikan SPA. Waktu itu `FRONTEND_URL` berisi
-   `http://backend-aedo-hotel.test` yang tidak dapat dihubungi, sehingga tamu mendarat di halaman
-   mati; nilai dev yang benar adalah `http://localhost:5173` (atau `PG_MIDTRANS_FINISH_URL` untuk
-   menimpa). `php artisan payment:test-connection` kini mencetak "Halaman hasil: …" dan memberi
-   peringatan kalau kosong / bukan URL sah. Produksi: isi dengan domain publik aplikasi, bukan `.test`.
-   Kalau dites dari HP di jaringan lokal, pakai IP LAN (mis. `http://192.168.x.x:5173`) — dan ingat
-   `api.ts` masih hardcode `http://localhost:8000`, jadi halaman hasil tidak dapat membaca API dari
-   perangkat lain sampai baseURL dibuat mengikuti `VITE_API_URL`.
-11. **Check-in dan check-out ikut merekonsiliasi pembayaran gateway.** Sebelum guard status
-   dijalankan, `BookingService::checkIn()` / `checkOut()` memanggil
-   `PaymentGatewayService::reconcileBooking($booking)` — menanyakan status transaksi gateway
-   milik reservasi itu (yang `pending` **dan** `expired`, karena settlement bisa datang
-   belakangan) lalu menyegarkan model. Efeknya:
-   - uang yang sudah masuk di Midtrans langsung membuat reservasi `confirmed` sehingga check-in jalan;
-   - check-out tidak lagi tertahan oleh payment `pending` yang sebenarnya sudah lunas;
-   - kalau gateway sedang tidak bisa dihubungi, operasi tetap jalan (tidak jadi error 500) dan
-     pesannya jujur: `... Status payment gateway belum dapat diperiksa — periksa koneksi lalu ulangi.`
-     atau `... Pembayaran gateway masih menunggu konfirmasi dari provider.`
-   Pembayaran manual (transfer/tunai) **tidak** ikut jalur ini — statusnya tetap lewat bukti
-   dan aturan auto-verify-nya sendiri.
-12. **Kalau dashboard provider bilang lunas tapi aplikasi bilang menunggu**, jalankan:
-   ```bash
-   php artisan payment:status AEDO-XXXXXXXXXXXXXXXX
-   ```
-   Perintah itu (read-only, tidak mengubah status) menanyakan **semua id yang diketahui untuk
-   payment ini** - order_id kita, `transaction_id` Midtrans yang pernah diingat, lalu token Snap -
-   lalu menampilkan jawaban yang cocok, payment lokal, dan vonisnya. Tiga hasil yang mungkin:
-   - `Tidak ada payment lokal dengan order_id itu` → transaksi "yatim": uangnya ada di provider
-     tapi tidak ada baris payment yang menagihnya (umumnya karena DB dev pernah di-`migrate:fresh`).
-   - `BELUM SINKRON: gateway bilang lunas, payment lokal masih pending` → tekan **Cek Status**
-     atau buka halaman Daftar Pembayaran/Reservasi; backend memverifikasi ulang lalu melunasi.
-   - `Sinkron: gateway belum mencatat pembayaran...` → halaman Snap memang belum dibuka/belum bayar.
-   Order id yang dipakai selalu `payments.gateway_transaction_id` (bentuk `AEDO-` + 16 karakter).
-13. **Sinkronisasi pembayaran itu 100% otomatis - sengaja tidak ada tombol "tautkan" manual.**
-   Yang terjadi di belakang layar:
-   1. Midtrans punya dua ledger lookup. `GET /v2/{order_id}/status` mengenal QRIS/VA/kartu, tapi
-      TIDAK mengenal e-wallet hasil Snap: DANA/GoPay tersimpan di bawah order_id Midtrans sendiri
-      (mis. `A120261015175339n2OJHjg6pEID`), jadi order_id kita dijawab "Transaction doesn't exist"
-      walaupun transaksinya sudah settlement. Inilah sebabnya DANA dulu menggantung di
-      "Menunggu Konfirmasi" sementara virtual account langsung terverifikasi.
-   2. `GET /snap/v1/transactions/{token}/status` (host `app.*`, Basic auth server key) justru
-      mengenalinya - dan mengembalikan `order_id` kita, `transaction_status`, `gross_amount`,
-      `payment_type`. Token sudah tersimpan di `payments.gateway_payload.token` sejak transaksi
-      dibuat, jadi backend tidak perlu bantuan siapa pun.
-   3. `syncStatus()` mencoba kandidat id berurutan: petunjuk baru (payload callback Snap JS / URL
-      redirect) -> order_id kita -> `transaction_id` provider yang pernah diingat -> token Snap.
-      Jawaban yang dipakai harus **terikat pada payment ini**: `order_id` yang dikembalikan gateway
-      harus sama dengan order_id kita atau sama dengan id yang kita tanyakan; jawaban untuk transaksi
-      lain (token salah tempel / payload bekas) diabaikan. Nominal wajib sama, idempoten, dan setiap
-      percobaan (termasuk yang ditolak) tercatat di `payment_gateway_logs`.
-   4. Id provider yang terbukti dikenali disimpan di `payments.gateway_payload.provider_transaction_id`;
-      `gateway_transaction_id` tidak pernah ditimpa karena notifikasi berkunci pada order_id kita.
-   5. Cadangan kedua: kalau redirect `callbacks.finish` membawa parameter notifikasi lengkap dengan
-      `signature_key`, `PaymentResultController` meneruskannya ke pipeline `handleWebhook()` yang sama
-      - tanda tangan dihitung dengan server key, jadi bukti itu sekuat webhook. Namun pada akun
-      sandbox ini Midtrans hanya menempelkan `status_code` dan `transaction_status` pada redirect
-      (terlihat dari `finish_redirect_url` yang mereka kembalikan), jadi jalur ini pelengkap, bukan
-      sandaran untuk e-wallet.
-
-   Praktisnya: **QRIS, VA, dan e-wallet (DANA/GoPay) sama-sama otomatis terverifikasi tanpa tindakan
-   manual.** Yang tidak bisa pulih sendiri hanyalah transaksi yang baris payment-nya sudah terhapus
-   dari database. Tetap siapkan **Notification
-   URL** di Merchant Account untuk keandalan penuh (produksi: domain publik; dev tanpa tunnel:
-   `cloudflared tunnel --url http://localhost:8000`) -> `https://<domain>/api/webhooks/payment-gateway`.
-
-14. **Uang muka (DP) berlaku di semua jalur bayar, bukan cuma di label.**
-   1. Ambang dan nominal DP dihitung di SATU tempat: `Booking::dp_min_amount` = `min_dp_percentage`
-      × tagihan, `Booking::dp_shortfall` = kurang berapa lagi supaya ambang terpenuhi. Keduanya ikut
-      terkirim pada setiap baris reservasi, jadi frontend tidak meniru rumusnya.
-   2. Gateway: `POST /bookings/{id}/payments/gateway` menerima `type` (`dp` | `final`, default `final`)
-      dan `amount` opsional. `type=dp` tanpa nominal menagih `dp_min_amount`; `final` menagih
-      `remaining_due`. Nominal ≤ 0 atau melebihi sisa, penagihan saat sisa sudah 0, dan penagihan saat
-      ada pembayaran manual menunggu verifikasi ditolak 422 dengan alasan yang bisa dibaca kasir.
-   3. DP gateway yang terverifikasi membuat payment `verified` dan reservasi otomatis `confirmed`
-      (uang muka mengunci kamar, check-in lalu jalan) sementara invoice **tetap belum** `paid` -
-      di situ bedanya pelunasan. Tagihan berikutnya otomatis sebesar sisa yang benar, bukan tagihan penuh.
-   4. Meja resepsionis: modal pembayaran di Daftar Reservasi dan form "Catat Pembayaran" bisa memilih
-      DP atau pelunasan; saat DP dipilih, nominal terisi otomatis sebesar kekurangan ambang.
-   5. Satu tagihan gateway aktif per invoice: tautan Snap/QR/VA yang masih pending dan belum
-      kedaluwarsa ditandai `expired` dengan catatan "Digantikan tagihan gateway baru" ketika kasir
-      membuat tagihan baru. Settlement lama yang ternyata datang belakangan tetap diverifikasi dan
-      ditandai perlu rekonsiliasi admin.
-
-Yang dilakukan sistem saat notifikasi masuk (sesuai best practice resmi Midtrans):
-`signature_key = SHA512(order_id + status_code + gross_amount + server_key)` dicocokkan dengan `hash_equals`;
-lunas hanya bila `transaction_status` `settlement`/`capture` **dan** `status_code` `200` **atau** `201`
-(201 adalah kode respons pembuatan transaksi yang dipakai endpoint `/v2/{}/status` untuk QRIS/VA/e-wallet;
-mewajibkan 200 saja membuat settlement sungguhan terbaca "menunggu konfirmasi" selamanya) **dan** `fraud_status=accept`;
-nominal pada notifikasi **maupun hasil sync** harus sama persis dengan tagihan; notifikasi dobel/balik urutan
-diabaikan (idempoten); semua percobaan (termasuk yang ditolak) tercatat di `payment_gateway_logs`.
-
-> **Batasan yang ditemukan saat pengujian langsung:** QRIS Core API BI-SNAP (`POST /v1/qris`) dan
-> Core API lama (`POST /v1/charge`) menjawab 404 untuk akun ini, jadi `qr_string` asli (EMVCo) belum
-> bisa ditampilkan inline — QRIS delivered lewat halaman `redirect_url` Midtrans. Untuk QR string
-> langsung di layar kasir, aktifkan produk QRIS BI-SNAP di Merchant Account lalu tambahkan channel itu.
-
-
-`gateway_transaction_id` yang disimpan adalah **`order_id` kita sendiri** (`AEDO-XXXXXXXXXXXXXXXX`), supaya
-webhook, cek status, dan rekonsiliasi memakai satu kunci yang sama. `transaction_id` Midtrans dipegang
-terpisah di `gateway_payload.provider_transaction_id` dan token Snap di `gateway_payload.token`; keduanya
-dipakai otomatis saat order_id tidak dikenali API status.
-
-> QRIS Snap ditampilkan di halaman `redirect_url` Midtrans (link diberikan ke frontend).
-> Kalau ingin QR string tampil langsung di layar kasir, pakai endpoint BI-SNAP `POST /v1/qris`
-> yang butuh aktivasi produk QRIS di Merchant Account.
-
-Kembali ke simulator lokal cukup set `PG_PROVIDER=simulator` (mode demo tanpa internet).
+1. Ambang dan nominal DP dihitung di SATU tempat: `Booking::dp_min_amount` = `min_dp_percentage`
+   × tagihan, `Booking::dp_shortfall` = kurang berapa lagi supaya ambang terpenuhi. Keduanya ikut
+   terkirim pada setiap baris reservasi, jadi frontend tidak meniru rumusnya.
+2. `POST /bookings/{id}/payments` menerima `type` (`dp` | `final`) dan `amount`. DP terverifikasi
+   membuat payment `verified` dan reservasi otomatis `confirmed` (uang muka mengunci kamar, check-in
+   lalu jalan) sementara invoice **tetap belum** `paid` - di situ bedanya pelunasan. Sisa tagihan
+   berikutnya otomatis sebesar sisa yang benar, bukan tagihan penuh.
+3. Form "Catat Pembayaran" dan modal pembayaran di Daftar Reservasi bisa memilih DP atau pelunasan;
+   saat DP dipilih, nominal terisi otomatis sebesar kekurangan ambang.
+4. Nominal ≤ 0 atau melebihi sisa tagihan, dan penagihan saat ada pembayaran menunggu verifikasi,
+   ditolak 422 dengan alasan yang bisa dibaca kasir.
 
 ---
 
@@ -1040,7 +738,6 @@ rooms
   ├── maintenance (laporan kerusakan)
   └── room_status_logs (riwayat perubahan status)
 
-payment_gateway_logs (semua webhook masuk)
 audit_logs (aksi penting)
 ```
 
@@ -1076,7 +773,7 @@ php artisan migrate --seed
 # Jalankan server
 php artisan serve
 
-# Jalankan scheduler (expired payments)
+# Jalankan scheduler (backup)
 php artisan schedule:work
 
 # Jalankan test
@@ -1094,32 +791,10 @@ php artisan test
 5. **KTP:** Field `ktp` dienkripsi di database — tidak akan muncul di response kecuali endpoint yang memang membutuhkannya.
 6. **Shift:** Jika pegawai mencoba mencatat transaksi tanpa shift aktif, backend akan mengembalikan error — tampilkan peringatan di UI.
 7. **Soft Delete:** Kamar dan tipe kamar menggunakan soft delete — data tidak hilang dari database meskipun di-delete via API.
-8. **Payment Gateway (Sandbox):** masih simulator — QR yang dikembalikan palsu. Untuk mensimulasikan
-   tamu membayar, pakai endpoint sandbox (bagian 6.14) atau tombol **Bayar (Sandbox)** di halaman
-   Pembayaran; jangan memanggil webhook manual kecuali Anda memang menguji validasinya.
+8. **Tidak ada payment gateway.** Tidak ada tombol sync/sandbox di UI dan tidak ada webhook yang perlu
+   dipanggil. Semua pembayaran dibuat lewat `POST /api/v1/bookings/{id}/payments`.
 9. **Status "menunggu verifikasi" tidak lagi berarti harus ada admin:** transfer/QRIS dengan bukti +
-   nomor referensi unik terverifikasi otomatis, dan settlement gateway diproses lewat webhook/polling.
-
-### Simulasi Pembayaran (untuk Testing)
-
-```bash
-# 1) Membuat tagihan gateway lewat API, catat data.gateway_transaction_id
-# 2) Simulasikan tamu membayar (butuh token sandbox = PG_SIMULATOR_SECRET di .env):
-curl -X POST http://localhost:8000/api/sandbox/gateway/SIM-XXXXXXXXXXXX/pay \
-  -H "Content-Type: application/json" \
-  -H "X-Sandbox-Token: simulator-secret-key-aedo-hotel" \
-  -d '{}'
-
-# Memanggil webhook langsung juga masih bisa, tapi amount wajib sama dengan tagihan:
-BODY='{"transaction_id":"SIM-XXXXXXXXXXXX","event":"payment.settled","status":"paid","amount":388500}'
-TS=$(date +%s)
-SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac 'simulator-secret-key-aedo-hotel' | cut -d' ' -f2)
-curl -X POST http://localhost:8000/api/webhooks/payment-gateway \
-  -H "Content-Type: application/json" \
-  -H "X-Simulator-Signature: hmac-sha256=$SIG" \
-  -H "X-Simulator-Timestamp: $TS" \
-  -d "$BODY"
-```
+   nomor referensi unik terverifikasi otomatis oleh backend.
 
 ---
 

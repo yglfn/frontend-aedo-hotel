@@ -10,6 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tabs } from '../../components/ui/Tabs';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
+import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
 import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import './RoomBoard.css';
@@ -45,6 +46,23 @@ const emptyRoomForm: RoomFormData = {
   floor: 1,
   status: 'available',
   notes: '',
+};
+
+const STATUS_LABEL: Record<RoomStatus, string> = {
+  available: 'Tersedia',
+  booked: 'Dipesan',
+  occupied: 'Terisi',
+  cleaning: 'Dibersihkan',
+  maintenance: 'Perbaikan',
+};
+
+// Dampak operasional bila status kamar diubah manual
+const STATUS_IMPACT: Record<RoomStatus, string> = {
+  available: 'Kamar kembali dijual.',
+  booked: 'Kamar ditandai sudah dipesan.',
+  occupied: 'Kamar tidak bisa dijual ke tamu lain.',
+  cleaning: 'Kamar ditandai sedang dibersihkan.',
+  maintenance: 'Kamar dikeluarkan dari daftar tersedia sampai perbaikan selesai.',
 };
 
 export default function RoomBoard() {
@@ -192,6 +210,20 @@ export default function RoomBoard() {
 
   const handleChangeStatus = async () => {
     if (!selectedRoom) return;
+
+    // Tidak ada perubahan: cukup tutup panel
+    if (newRoomStatus === selectedRoom.status) {
+      setIsDetailOpen(false);
+      return;
+    }
+
+    const sure = await confirmDialog({
+      title: 'Ubah Status Kamar?',
+      message: `Kamar ${selectedRoom.room_number}: ${STATUS_LABEL[selectedRoom.status]} → ${STATUS_LABEL[newRoomStatus]}.\n\n${STATUS_IMPACT[newRoomStatus]}`,
+      confirmLabel: 'Ubah Status',
+    });
+    if (!sure) return;
+
     setIsUpdatingStatus(true);
     try {
       await api.patch(`/api/v1/rooms/${selectedRoom.id}/status`, {

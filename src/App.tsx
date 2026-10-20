@@ -8,7 +8,6 @@ import BookingList from './features/bookings/BookingList';
 import NewBooking from './features/bookings/NewBooking';
 import PaymentList from './features/payments/PaymentList';
 import PaymentForm from './features/payments/PaymentForm';
-import PaymentResult from './features/payments/PaymentResult';
 import HousekeepingBoard from './features/housekeeping/HousekeepingBoard';
 import MaintenanceList from './features/maintenance/MaintenanceList';
 import CustomerList from './features/customers/CustomerList';
@@ -58,10 +57,6 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
 
-      {/* Publik: tujuan redirect Midtrans setelah tamu bayar. Tanpa AppShell & tanpa login —
-          status tetap diverifikasi backend ke gateway, bukan dari parameter URL. */}
-      <Route path="/payment-result" element={<PaymentResult />} />
-      
       {/* Rute Operasional (Bisa diakses Admin & Pegawai) */}
       <Route path="/dashboard" element={<RequireAuth><AppShell><Dashboard /></AppShell></RequireAuth>} />
       <Route path="/rooms" element={<RequireAuth><AppShell><RoomBoard /></AppShell></RequireAuth>} />

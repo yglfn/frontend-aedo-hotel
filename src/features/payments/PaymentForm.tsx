@@ -62,7 +62,7 @@ export default function PaymentForm() {
 
   // Cek apakah sudah ada pembayaran pending untuk tipe yang sama
   const getPendingForType = (b: BookingOption, type: string): BookingPayment[] => {
-    return (b.payments || []).filter(p => p.status === 'pending' && p.type === type && p.method !== 'payment_gateway');
+    return (b.payments || []).filter(p => p.status === 'pending' && p.type === type);
   };
 
   const selectedBooking: BookingOption | undefined = bookings.find(b => String(b.id) === bookingId);

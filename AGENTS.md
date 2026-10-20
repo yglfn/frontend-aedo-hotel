@@ -10,10 +10,10 @@
 
 ## 1. Ringkasan proyek
 
-Sistem informasi berbasis web untuk mengelola operasional **Aedo Hotel Syariah** (hotel kecil): reservasi (walk-in/telepon, dan Traveloka yang diinput manual), data tamu, check-in/check-out, pembayaran (tunai, transfer, payment gateway), invoice, status kamar, housekeeping, maintenance, dashboard, dan laporan.
+Sistem informasi berbasis web untuk mengelola operasional **Aedo Hotel Syariah** (hotel kecil): reservasi (walk-in/telepon, dan Traveloka yang diinput manual), data tamu, check-in/check-out, pembayaran (tunai, transfer, QRIS dicatat manual oleh staf), invoice, status kamar, housekeeping, maintenance, dashboard, dan laporan.
 
 - Hotel hanya punya **2 pegawai** yang bergantian **2 shift @ 12 jam**. Akuntabilitas transaksi per shift itu penting.
-- Tamu **tidak** punya akun dan **tidak** booking sendiri. Tamu hanya menerima link/QR pembayaran.
+- Tamu **tidak** punya akun dan **tidak** booking sendiri.
 - Metode: Agile Scrum, 7 sprint (lihat bagian 10).
 - Ini proyek kuliah dengan klien nyata. Utamakan kode yang sederhana, benar, dan mudah dijelaskan di laporan, bukan arsitektur yang berlebihan.
 
@@ -50,9 +50,9 @@ Hanya 2 role (`users.role`): `admin` (Admin/Owner) dan `pegawai`.
 | CRUD layanan tambahan | ✔ | ✘ (hanya menambahkan ke reservasi) |
 | Buat/ubah/batalkan reservasi, input tamu | ✔ | ✔ |
 | Check-in, check-out | ✔ | ✔ |
-| Catat pembayaran, buat permintaan bayar gateway, cetak invoice | ✔ | ✔ |
+| Catat pembayaran manual (tunai/transfer/QRIS), cetak invoice | ✔ | ✔ |
 | Verifikasi bukti pembayaran manual | ✔ | ✘ |
-| Lihat log callback gateway, transaksi pending/expired | ✔ | ✘ |
+| Lihat transaksi pending | ✔ | ✔ |
 | Laporkan kerusakan kamar, update status kamar, kerjakan housekeeping task | ✔ | ✔ |
 | Kelola penugasan housekeeping & maintenance, laporan housekeeping | ✔ | ✘ |
 | Laporan + export PDF/Excel, lihat review | ✔ | ✘ |
@@ -76,7 +76,7 @@ Skema awal ada di `database/schema.sql` (ekspor dbdiagram, sintaks MySQL). **Sum
 - `booking_guests`: tamu utama + tambahan (`is_primary`).
 - `services`, `booking_services`: layanan tambahan; `price_at_transaction` adalah snapshot harga.
 - `invoices`: `invoice_number` unik, `subtotal`, `discount`, `tax`, `total`, `status` (`draft|sent|paid|void`).
-- `payments`: `method` (`cash|transfer|qris|payment_gateway`), `type` (`dp|final|refund`), `status` (`pending|verified|failed|expired`), `proof_of_payment`, `reference_number`, `verified_by`, `created_by`, `paid_at`.
+- `payments`: `method` (`cash|transfer|qris`), `type` (`dp|final|refund`), `status` (`pending|verified|failed`), `proof_of_payment`, `reference_number`, `verified_by`, `created_by`, `paid_at`.
 - `housekeeping_tasks`, `maintenance`, `reviews`.
 
 ### 4.2 Tambahan skema yang dibutuhkan (buat sebagai migration baru, additive)
@@ -89,15 +89,12 @@ Laporan menuntut hal-hal ini tetapi belum ada di skema:
 **`room_status_logs`** (riwayat status kamar)
 `id`, `room_id`, `from_status`, `to_status`, `changed_by` (FK users, nullable bila diubah sistem), `booking_id` (nullable), `reason` (nullable), `created_at`.
 
-**`payment_gateway_logs`** (log callback/webhook)
-`id`, `payment_id` (nullable, bisa belum ketemu), `provider`, `event_type`, `payload` (json/longtext, mentah), `headers` (json, tanpa data rahasia), `signature_valid` (boolean), `processed` (boolean), `error_message` (nullable), `received_at`, `created_at`.
-
 **`audit_logs`**
 `id`, `user_id` (nullable), `action`, `auditable_type`, `auditable_id`, `old_values` (json), `new_values` (json), `ip_address`, `created_at`.
 
 **Kolom tambahan pada tabel yang ada:**
-- `payments`: `shift_id` (nullable FK), `provider`, `gateway_transaction_id`, `channel` (mis. qris/va/ewallet), `gateway_payload` (json: data QR/nomor VA), `expires_at`.
-- `settings`: `payment_gateway_provider`, `payment_gateway_config` (terenkripsi), `payment_expiry_minutes` (default 60).
+- `payments`: `shift_id` (nullable FK).
+- `settings`: `min_dp_percentage`, `auto_verify_transfers`, `auto_verify_max_amount`.
 - `rooms`, `room_types`: `deleted_at` (SoftDeletes). Data master tidak boleh benar-benar dihapus bila sudah dipakai transaksi. `users` dan `services` cukup memakai `is_active`.
 
 ### 4.3 Keputusan desain data
@@ -105,7 +102,7 @@ Laporan menuntut hal-hal ini tetapi belum ada di skema:
 - **Tanggal untuk availability** diambil dari `booking_rooms.check_in/check_out` (agar tiap kamar bisa punya tanggal berbeda). `bookings.check_in/check_out` diisi otomatis sebagai tanggal paling awal/akhir dari kamar-kamarnya dan dijaga tetap sinkron.
 - Uang selalu `decimal(12,2)`, tidak pernah float.
 - Snapshot harga (`price_per_night`, `price_at_transaction`) tidak boleh ikut berubah saat harga master diubah.
-- Index: `bookings(status, check_in, check_out)`, `booking_rooms(room_id, check_in, check_out)`, `payments(status, booking_id)`, `payments(gateway_transaction_id)`.
+- Index: `bookings(status, check_in, check_out)`, `booking_rooms(room_id, check_in, check_out)`, `payments(status, booking_id)`.
 - `customers.ktp` dan `booking_guests.ktp`: enkripsi di level aplikasi (cast `encrypted`). Jangan tampil di log atau response yang tidak memerlukannya.
 - Gunakan PHP Enum (`app/Enums`) untuk status booking, kamar, pembayaran, dll. Jangan menyebar string literal.
 
@@ -146,16 +143,16 @@ Laporan menuntut hal-hal ini tetapi belum ada di skema:
 9. **Shift:** pegawai harus **memulai shift** (`POST /shifts/start`) sebelum mencatat transaksi, dan **mengakhiri shift** di akhir tugas. Satu pegawai hanya boleh punya satu shift `open`. Setiap pembayaran milik pegawai otomatis diberi `shift_id` shift yang sedang berjalan. Transaksi admin boleh `shift_id = null`. **[TENTUKAN]** jam mulai tiap shift dan apakah ada rekonsiliasi kas saat tutup shift.
 10. **Audit:** catat `last_login_at`; aksi penting (verifikasi bayar, pembatalan, perubahan harga, diskon, koreksi data) ditulis ke `audit_logs`.
 11. **Review (default):** tamu tidak login, jadi review diinput oleh admin/pegawai setelah check-out (rating 1–5 + komentar), satu review per booking.
-12. **Notifikasi (default):** cukup notifikasi di dashboard (check-in/out hari ini, pembayaran pending/expired). Email/WhatsApp **tidak** dibuat kecuali diminta. **[TENTUKAN]** bila klien menginginkan kanal lain.
+12. **Notifikasi (default):** cukup notifikasi di dashboard (check-in/out hari ini, pembayaran pending). Email/WhatsApp **tidak** dibuat kecuali diminta. **[TENTUKAN]** bila klien menginginkan kanal lain.
 
-## 7. Payment gateway
+## 7. Pembayaran (manual saja — tanpa payment gateway)
 
-- Metode: QRIS, Virtual Account, e-wallet. **[TENTUKAN]** provider (Midtrans/Xendit/Tripay/DOKU/dll.). Bangun di balik interface `PaymentGatewayInterface` (`app/Services/PaymentGateway/`) agar provider mudah diganti, dan mulai dengan sandbox.
-- Alur: pegawai membuat permintaan bayar → backend memanggil API gateway → QR/nomor VA ditampilkan → gateway mengirim **webhook** → backend **memverifikasi signature** → validasi nominal → update `payments.status` dan, bila lunas, status invoice/booking.
-- Endpoint webhook: publik (tanpa session/CSRF), **wajib** verifikasi signature, **idempotent** (webhook yang sama bisa datang berulang), tolak signature salah dengan 401/403, dan **selalu tulis ke `payment_gateway_logs`** termasuk yang gagal.
-- Scheduler (tiap beberapa menit): tandai `pending` yang melewati `expires_at` menjadi `expired`; boleh sinkron status ke gateway.
-- API key dan secret hanya di `.env` atau kolom terenkripsi. Jangan pernah di-commit, di-log, atau dikirim ke frontend.
-- Selalu tersedia **fallback pembayaran manual** bila gateway bermasalah.
+Fitur payment gateway (Midtrans/Snap, webhook, scheduler penanda `expired`) **sudah dihentikan**. Jangan menambah kembali lapisan provider apa pun: tidak ada `app/Services/PaymentGateway/`, tidak ada endpoint `/payments/gateway`, `/payments/{id}/sync`, `/webhooks/payment-gateway`, `/payment-result`, tidak ada tabel `payment_gateway_logs`, dan tidak ada kolom `provider` / `gateway_*` / `expires_at` di `payments`.
+
+- Metode bayar yang diakui: `cash`, `transfer`, `qris`. Ketiganya **dicatat manual oleh staf** lewat `POST /bookings/{id}/payments`.
+- Alur status: tunai → langsung `verified`; transfer/QRIS → `pending` lalu `verified` setelah admin menilai bukti, atau `failed` bila ditolak. Verifikasi otomatis dimungkinkan bila bukti + nomor referensi lengkap (lihat `settings.auto_verify_*`).
+- Tidak ada lagi status `expired`: pembayaran yang tidak selesai ditolak/dibatalkan admin (`failed`), bukan kedaluwarsa otomatis oleh cron.
+- Uang yang diterima di luar sistem (mis. tamu transfer langsung ke rekening) tetap harus menjadi satu baris `payments` agar invoice dan laporan akurat; tidak ada jalur "lunas" tanpa baris pembayaran.
 - Reservasi Traveloka: **[TENTUKAN]** bagaimana pembayarannya dicatat (dibayar ke hotel oleh Traveloka? nilai bersih atau kotor?) dan apakah perlu metode pembayaran khusus. Sampai ada keputusan, `source = traveloka` hanya menandai asal reservasi tanpa aturan pembayaran khusus.
 - Refund: **[TENTUKAN]** kebijakan (DP hangus atau tidak, batas waktu). Tipe `refund` di `payments` sudah disiapkan.
 
@@ -172,7 +169,6 @@ app/
   Policies/
   Services/              # logika bisnis: BookingService, AvailabilityService,
                          # PaymentService, InvoiceService, ShiftService, ReportService
-    PaymentGateway/      # interface + implementasi provider
 database/migrations, seeders, factories
 tests/Feature/
 ```
@@ -195,10 +191,8 @@ tests/Feature/
 | Services | `apiResource services` | admin |
 | Customers | `apiResource customers` (+ pencarian) | semua |
 | Bookings | `apiResource bookings`, `POST bookings/{id}/check-in`, `POST bookings/{id}/check-out`, `POST bookings/{id}/cancel`, `POST bookings/{id}/services` | semua |
-| Payments | `POST bookings/{id}/payments`, `POST payments/{id}/proof`, `PATCH payments/{id}/verify`, `POST bookings/{id}/payments/gateway`, `GET payments/{id}` | semua (verify: admin) |
+| Payments | `POST bookings/{id}/payments`, `POST payments/{id}/proof`, `PATCH payments/{id}/verify`, `PATCH payments/{id}/reject`, `POST payments/{id}/reverse`, `GET payments/{id}` | semua (verify/reject/reverse: admin) |
 | Invoices | `GET invoices`, `GET invoices/{id}`, `GET invoices/{id}/pdf` | semua |
-| Webhook | `POST /webhooks/payment-gateway` | publik + signature |
-| Gateway logs | `GET /payment-gateway-logs` | admin |
 | Housekeeping | `GET housekeeping-tasks`, `PATCH housekeeping-tasks/{id}` (status + catatan) | semua; assign: admin |
 | Maintenance | `apiResource maintenance`, `PATCH maintenance/{id}/status` | pegawai (lapor), admin (kelola) |
 | Reviews | `GET reviews`, `POST bookings/{id}/review` | admin (lihat), semua (input) |
@@ -218,7 +212,7 @@ HTTPS, password di-hash (bcrypt/argon), akses berbasis role, rate limiting untuk
 | 3 | 5 – 18 Okt | Tipe kamar, kamar, layanan, status kamar + `room_status_logs`, housekeeping, maintenance |
 | 4 | 19 Okt – 1 Nov | Reservasi multi-kamar, tamu, availability, check-in/out, `shifts` |
 | 5 | 2 – 15 Nov | Invoice, pembayaran manual, verifikasi |
-| 6 | 16 – 22 Nov | Payment gateway: request, webhook, `payment_gateway_logs`, scheduler |
+| 6 | 16 – 22 Nov | ~~Payment gateway~~ — **dibatalkan**; pembayaran sepenuhnya manual (lihat bagian 7) |
 | 7 | 23 – 29 Nov | Laporan, export PDF/Excel, finalisasi |
 
 Kerjakan hanya sprint yang diminta. `shifts` dan kolom `shift_id` sebaiknya sudah ada sebelum modul pembayaran (Sprint 5). Karena Sprint 1–2 sudah lewat, bila ada tabel tambahan dari bagian 4.2 yang belum ada, tambahkan lewat migration baru.
@@ -228,7 +222,7 @@ Kerjakan hanya sprint yang diminta. `shifts` dan kolom `shift_id` sebaiknya suda
 **Lakukan:**
 - Baca bagian relevan dokumen ini dan skema sebelum mengubah apa pun.
 - Pakai migration, seeder (1 admin awal, 1 baris `settings`, data demo kamar), dan factory untuk testing.
-- Tulis feature test untuk aturan penting: double booking, perhitungan total, alur check-in/out, hak akses per role, verifikasi signature webhook, idempotensi webhook, dan tidak bisa transaksi tanpa shift.
+- Tulis feature test untuk aturan penting: double booking, perhitungan total, alur check-in/out, hak akses per role, ambang DP, verifikasi/penolakan pembayaran manual, dan tidak bisa transaksi tanpa shift.
 - Gunakan DB transaction untuk operasi yang mengubah beberapa tabel.
 - Bila menemukan aturan yang belum jelas atau berstatus **[TENTUKAN]**, tanyakan, jangan menebak.
 
@@ -237,7 +231,8 @@ Kerjakan hanya sprint yang diminta. `shifts` dan kolom `shift_id` sebaiknya suda
 - Menaruh logika bisnis di controller atau mempercayai angka total dari frontend.
 - Meng-commit `.env`, API key, atau data tamu asli.
 - Menambah fitur di luar scope.
-- Mengarang endpoint gateway, nama field provider, atau data lain yang tidak ada di dokumen ini.
+- Mengarang endpoint, nama field, atau data lain yang tidak ada di dokumen ini.
+- Menghidupkan kembali integrasi payment gateway (webhook, scheduler penanda expired, kolom `gateway_*`) tanpa permintaan tertulis dari klien.
 
 **Definition of Done per fitur:** migration berjalan bersih, validasi + otorisasi ada, feature test lulus, endpoint tercatat di Postman collection, tidak ada secret yang bocor.
 
@@ -249,17 +244,16 @@ cp .env.example .env && php artisan key:generate
 php artisan migrate --seed
 php artisan serve
 php artisan test
-php artisan schedule:work   # scheduler: expired payment, backup
+php artisan schedule:work   # scheduler: backup DB
 ```
 
-Environment variable: `APP_*` (termasuk `APP_TIMEZONE=Asia/Jakarta`), `DB_*`, `SANCTUM_STATEFUL_DOMAINS`, `SESSION_DOMAIN`, `FRONTEND_URL`, `PG_*` (kredensial gateway, nama pasti **[TENTUKAN]** setelah provider dipilih), konfigurasi backup.
+Environment variable: `APP_*` (termasuk `APP_TIMEZONE=Asia/Jakarta`), `DB_*`, `SANCTUM_STATEFUL_DOMAINS`, `SESSION_DOMAIN`, konfigurasi backup. Tidak ada variabel kredensial payment gateway — fiturnya sudah dihapus.
 
 ## 13. Daftar keputusan yang masih terbuka
 
-1. Provider payment gateway.
-2. Pencatatan pembayaran reservasi Traveloka (nilai bersih/kotor, metode).
-3. Kebijakan refund dan DP hangus.
-4. Jam mulai/akhir tiap shift dan rekonsiliasi kas saat tutup shift.
-5. Apakah pembayaran tunai oleh pegawai perlu verifikasi admin.
-6. Kanal notifikasi selain dashboard (email/WhatsApp), bila diminta klien.
-7. Web server dan Docker untuk deployment VPS.
+1. Pencatatan pembayaran reservasi Traveloka (nilai bersih/kotor, metode).
+2. Kebijakan refund dan DP hangus.
+3. Jam mulai/akhir tiap shift dan rekonsiliasi kas saat tutup shift.
+4. Apakah pembayaran tunai oleh pegawai perlu verifikasi admin.
+5. Kanal notifikasi selain dashboard (email/WhatsApp), bila diminta klien.
+6. Web server dan Docker untuk deployment VPS.

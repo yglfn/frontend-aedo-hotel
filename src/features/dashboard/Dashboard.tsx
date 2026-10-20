@@ -216,7 +216,7 @@ export default function Dashboard() {
               <div style={{ padding: '12px 16px', background: 'var(--surface-sunken)', borderRadius: '8px' }}>
                 <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>Non-Tunai (Transfer/QRIS)</span>
                 <span className="text-h3">{formatIDR(data.shift.non_cash_amount)}</span>
-                <span className="text-body-small text-ink-500" style={{ display: 'block', marginTop: '2px' }}>Rekening / Gateway</span>
+                <span className="text-body-small text-ink-500" style={{ display: 'block', marginTop: '2px' }}>Rekening / QRIS</span>
               </div>
               <div style={{ padding: '12px 16px', background: 'var(--surface-sunken)', borderRadius: '8px' }}>
                 <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>Total Seluruh Transaksi</span>
