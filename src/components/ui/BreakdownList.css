@@ -1,0 +1,63 @@
+/* Daftar peringkat: label + batang porsi + angka (pengganti donut untuk rincian panjang). */
+
+.breakdown {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.breakdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.breakdown-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.breakdown-label {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.breakdown-value {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.breakdown-hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-400);
+}
+
+.breakdown-track {
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-chip);
+  background-color: var(--surface-muted);
+  overflow: hidden;
+}
+
+.breakdown-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-chip);
+}
+
+.breakdown-empty {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-400);
+}

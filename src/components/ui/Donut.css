@@ -1,0 +1,126 @@
+/* Donut komposisi: cincin SVG + angka di tengah + legenda di samping (DESIGN.md 5.13). */
+
+.donut {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.donut-chart {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  flex: none;
+}
+
+.donut-chart svg {
+  width: 100%;
+  height: 100%;
+  /* Mulai segmen dari jam 12, seperti donut pada umumnya */
+  transform: rotate(-90deg);
+}
+
+.donut-track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 16;
+}
+
+.donut-segment {
+  fill: none;
+  stroke-width: 16;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  padding: 0 18px;
+}
+
+.donut-value {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 700;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.donut-label {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+.donut-legend {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.donut-legend-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto 48px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.donut-legend-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.donut-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-chip);
+}
+
+.donut-legend-label {
+  color: var(--ink-700);
+}
+
+.donut-legend-value {
+  color: var(--ink-900);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.donut-legend-percent {
+  color: var(--ink-400);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.donut-empty {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-400);
+}
+
+@media (max-width: 640px) {
+  .donut {
+    gap: 16px;
+  }
+  .donut-chart {
+    width: 124px;
+    height: 124px;
+  }
+}

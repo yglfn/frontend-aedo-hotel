@@ -1,0 +1,218 @@
+/* Pola bersama gaya bersih (lihat referensi UI): label mikro uppercase, garis bagian,
+   banner inline, penanda langkah, dan remah jalur. Semua lewat token, tanpa warna mentah. */
+
+/* Label mikro: "IDENTIFIKASI UNIT", "STATUS GARANSI", "MENU UTAMA" */
+.text-mikro {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+/* Judul bagian dalam form: label mikro + garis rambut pembatas */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--line);
+}
+
+/* Banner inline: status nyata, bukan hiasan (sukses / info / bahaya) */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-tile);
+  background-color: var(--surface-tint);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-700);
+}
+
+.callout svg {
+  margin-top: 2px;
+  flex: none;
+}
+
+.callout-judul {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.callout-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+  font-variant-numeric: tabular-nums;
+}
+
+.callout-success {
+  background-color: var(--success-bg);
+  border-color: transparent;
+  color: var(--success-fg);
+}
+
+.callout-success .callout-judul {
+  color: var(--success-fg);
+}
+
+.callout-info {
+  background-color: var(--warning-bg);
+  border-color: transparent;
+  color: var(--warning-fg);
+}
+
+.callout-info .callout-judul {
+  color: var(--warning-fg);
+}
+
+.callout-danger {
+  background-color: var(--danger-bg);
+  border-color: transparent;
+  color: var(--danger-fg);
+}
+
+.callout-danger .callout-judul {
+  color: var(--danger-fg);
+}
+
+/* Penanda langkah alur kerja: 1 Unit — 2 Customer */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stepper-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-400);
+}
+
+.stepper-num {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-chip);
+  background-color: var(--surface-muted);
+  color: var(--ink-500);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper-item.aktif {
+  color: var(--ink-900);
+  font-weight: 600;
+}
+
+.stepper-item.aktif .stepper-num {
+  background-color: var(--primary-600);
+  color: var(--ink-inverse);
+}
+
+.stepper-garis {
+  flex: 1;
+  min-width: 32px;
+  height: 1px;
+  background-color: var(--line);
+}
+
+/* Remah jalur: Home / Reservasi / Baru */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+}
+
+.breadcrumb a {
+  color: var(--ink-500);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--primary-600);
+}
+
+.breadcrumb-pisah {
+  color: var(--ink-400);
+  opacity: 0.6;
+}
+
+.breadcrumb-now {
+  color: var(--ink-900);
+  font-weight: 600;
+}
+
+/* Angka uang yang jadi fokus layar: total tagihan / estimasi bayar / sisa. */
+.money-total {
+  display: inline-block;
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--primary-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.money-total-sm {
+  display: inline-block;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+  color: var(--primary-700);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Label di baris total: ikut menonjol tapi tidak merebut angka */
+.money-label {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink-900);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Sisa tagihan: angka besar berwarna sesuai keadaan */
+.money-due {
+  color: var(--danger-fg);
+}
+
+.money-pending {
+  color: var(--warning-fg);
+}
+
+.money-paid {
+  color: var(--success-fg);
+}
+
+/* Angka total di dalam sel tabel: menonjol tanpa merusak kerapatan baris */
+.money-cell {
+  font-weight: 700;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}

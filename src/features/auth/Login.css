@@ -1,75 +1,318 @@
-.login-container {
-  display: flex;
-  min-height: 100vh;
-  width: 100%;
-}
+/* Halaman masuk petugas. Gaya bersih: latar putih, garis rambut, label mikro uppercase,
+   aksen hijau hanya pada fokus/aktif. Semua warna/radius/-shadow lewat token (DESIGN.md §2 & §3).
+   Tata letak: dua kolom SAMA LEBAR, masing-masing 3 pita (atas / tengah / bawah). */
 
-.login-form-section {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.login-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 100dvh;
   background-color: var(--surface);
-  padding: 24px;
 }
 
-.login-form-wrapper {
+/* Ukuran isi yang dipakai dua kolom agar tepi kiri-kanan sejajar. */
+.login-shell :is(.login-lockup, .login-main, .login-foot, .login-brand-atas, .login-brand-tengah, .login-fakta) {
   width: 100%;
   max-width: 400px;
+  margin-inline: auto;
 }
 
-.mt-2 { margin-top: 8px; }
-.mb-8 { margin-bottom: 32px; }
+/* ------------------------------------------------------------------ kolom form */
 
-.login-error-banner {
+.login-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 32px;
+  padding: 48px 56px;
+}
+
+.login-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-tile);
+  background-color: var(--primary-tint);
+  color: var(--primary-600);
+  flex: none;
+}
+
+.login-lockup-teks {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.login-lockup-nama {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.login-lockup-sub {
+  font-size: 12px;
+  color: var(--ink-400);
+}
+
+/* Pita tengah: form duduk di tengah kolom, sejajar dengan pernyataan hotel di kanan. */
+.login-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.login-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+  margin-bottom: 8px;
+}
+
+.login-judul {
+  margin-bottom: 8px;
+}
+
+.login-sub {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-500);
+  margin-bottom: 24px;
+}
+
+.login-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border-radius: var(--radius-tile);
   background-color: var(--danger-bg);
   color: var(--danger-fg);
-  padding: 12px 16px;
-  border-radius: var(--radius-control);
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 20px;
   font-weight: 500;
-  margin-bottom: 24px;
+}
+
+.login-error svg {
+  margin-top: 1px;
+  flex: none;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-.login-submit-btn {
-  margin-top: 12px;
+.login-submit {
   width: 100%;
+  margin-top: 4px;
 }
 
-.login-branding-section {
-  flex: 1;
-  background-color: var(--primary-800);
-  display: flex;
+/* Tombol mata di dalam input: .input-icon dipasang pointer-events none, jadi
+   kontrolannya harus diaktifkan kembali di sini. */
+.login-eye {
+  pointer-events: auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 40px;
-  color: white;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-tile);
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+  transition: color 120ms cubic-bezier(0.2, 0, 0, 1), background-color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.branding-content {
-  max-width: 480px;
+.login-eye:hover {
+  color: var(--ink-700);
+  background-color: var(--surface-tint);
 }
 
-.branding-title {
-  font-size: 32px;
+.login-bantuan {
+  margin-top: 24px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+}
+
+/* Pita bawah kiri: garis rambut sama seperti daftar fakta di pita bawah kanan. */
+.login-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+}
+
+/* ------------------------------------------------------------- panel identitas */
+
+/* Panel terang, bukan blok gelap: aksen hijau dipakai sehemat mungkin. */
+.login-brand {
+  position: relative;
+  display: grid;
+  padding: 48px 56px;
+  background-color: var(--surface-tint);
+  border-left: 1px solid var(--line);
+  color: var(--ink-700);
+  overflow: hidden;
+}
+
+/* Kisi geometris halus dengan warna garis rambut - satu warna, sangat tipis. */
+.login-brand::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(-45deg, var(--line) 0 1px, transparent 1px 28px);
+  opacity: 0.5;
+}
+
+/* Cermin dari .login-pane: tiga pita dengan tinggi baris yang sama. */
+.login-brand-dalam {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 32px;
+}
+
+.login-brand-atas {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.login-brand-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-chip);
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-500);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 16px;
+}
+
+.login-brand-tengah {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.login-brand-nama {
+  font-size: 26px;
+  line-height: 34px;
   font-weight: 700;
-  margin-bottom: 16px;
+  color: var(--ink-900);
+  margin-bottom: 8px;
 }
 
-.branding-text {
-  font-size: 18px;
-  line-height: 1.5;
-  color: var(--primary-100);
+.login-brand-alamat {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-500);
+  margin-bottom: 24px;
+}
+
+.login-brand-alamat svg {
+  margin-top: 2px;
+  flex: none;
+}
+
+.login-brand-teks {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-500);
+}
+
+/* Strip fakta horizontal: tingginya sebaya dengan footer di kolom kiri, jadi kedua
+   pita bawah benar-benar sejajar dan blok tengah tidak bergeser. */
+.login-fakta {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--line);
+}
+
+.login-fakta > div {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 12px 0;
+}
+
+.login-fakta > div + div {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+
+.login-fakta dt {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+  margin-bottom: 2px;
+}
+
+.login-fakta dd {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------- responsif */
+
+@media (max-width: 1200px) {
+  .login-pane,
+  .login-brand {
+    padding: 40px;
+  }
 }
 
 @media (max-width: 1024px) {
-  .login-branding-section {
+  .login-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .login-brand {
     display: none;
+  }
+
+  .login-pane {
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .login-main {
+    padding: 32px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-eye {
+    transition: none;
   }
 }

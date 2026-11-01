@@ -10,7 +10,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Drawer } from '../../components/ui/Drawer';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { confirmDialog } from '../../components/ui/ConfirmDialog';
-import { formatIDR, formatDateShort } from '../../lib/format';
+import { formatIDR, formatDateShort, maskKtp } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
 import type { BookingStatus } from '../../types';
 import './BookingList.css';
@@ -22,11 +22,31 @@ interface Booking {
   check_in: string;
   check_out: string;
   total_price: number;
-  customer: { id: number; name: string; phone?: string; ktp?: string };
+  source?: string;
+  notes?: string | null;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
+  created_at?: string;
+  created_by?: { id: number; name: string } | null;
+  customer: { id: number; name: string; phone?: string; email?: string; ktp?: string };
+  guest_count?: number;
+  booking_guests?: Array<{ id: number; name: string; ktp?: string | null; is_primary?: boolean; booking_room_id?: number | null }>;
   assigned_rooms?: string[];
   booking_rooms?: Array<{
     id: number;
-    room?: { id: number; room_number: string };
+    check_in?: string;
+    check_out?: string;
+    nights?: number;
+    price_per_night?: number | string;
+    total_price?: number | string;
+    room?: { id: number; room_number: string; room_type?: { id: number; name: string; price?: number | string; max_person?: number } | null };
+  }>;
+  booking_services?: Array<{
+    id: number;
+    quantity?: number;
+    price_at_transaction?: number | string;
+    total?: number | string;
+    service?: { id: number; name: string; unit?: string } | null;
   }>;
   payments?: Array<{
     id: number;
@@ -34,8 +54,13 @@ interface Booking {
     method: string;
     type?: string;
     status: string;
+    reference_number?: string | null;
+    paid_at?: string | null;
+    created_at?: string;
+    created_by?: { id: number; name: string } | null;
+    verified_by?: { id: number; name: string } | null;
   }>;
-  invoice?: { id: number; status: string; total: string };
+  invoice?: { id: number; status: string; total: string; invoice_number?: string; subtotal?: number | string; discount?: number | string; tax?: number | string };
   // Ringkasan pembayaran dihitung ulang oleh backend (satu rumus untuk semua layar)
   paid_verified?: number;
   paid_pending?: number;
@@ -46,6 +71,35 @@ interface Booking {
   has_pending_payment?: boolean;
   blocks_manual_payment?: boolean;
 }
+
+/** Sumber reservasi -> label yang dibaca manusia. */
+const SOURCE_LABEL: Record<string, string> = {
+  walk_in: 'Walk-in',
+  phone: 'Telepon',
+  traveloka: 'Traveloka',
+  other: 'Lainnya',
+};
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'Tunai',
+  transfer: 'Transfer Bank',
+  qris: 'QRIS',
+  credit_card: 'Kartu Kredit',
+  payment_gateway: 'Payment Gateway',
+};
+
+/** KTP tidak perlu tampil utuh di layar ringkasan; pengaburannya sudah ada di lib/format. */
+const tampilkanKtp = (ktp?: string | null) => (ktp ? maskKtp(ktp) : '-');
+
+/** Alur reservasi menurut AGENTS.md: pending -> confirmed -> checked_in -> checked_out. */
+const FLOW_LABELS = ['Reservasi', 'Konfirmasi', 'Check-In', 'Check-Out'];
+const FLOW_STATUS: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'checked_out'];
+
+/** Menandai langkah yang sudah dilewati. `cancelled` tidak menyalakan langkah apa pun. */
+const flowStepsDone = (status: BookingStatus): boolean[] => {
+  const index = FLOW_STATUS.indexOf(status);
+  return FLOW_STATUS.map((_, step) => index >= 0 && step <= index);
+};
 
 export default function CheckInOutCenter() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,6 +114,9 @@ export default function CheckInOutCenter() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Daftar mengirim relasi ringkas; detail diambil lewat GET /bookings/{id} agar kamar,
+  // layanan, dan riwayat bayar benar-benar terbaca (bukan disalin dari baris tabel).
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // Check-In Dialog (Jaminan)
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
@@ -67,6 +124,11 @@ export default function CheckInOutCenter() {
   const [guaranteeType, setGuaranteeType] = useState('ktp');
   const [guaranteeNote, setGuaranteeNote] = useState('');
   const [depositAmount, setDepositAmount] = useState('0');
+  // Penghuni yang belum tercatat saat reservasi; wajib dilengkapi sebelum check-in.
+  // room_id mengacu ke kamar fisik (room.id), bukan booking_room.
+  const [extraGuests, setExtraGuests] = useState<Array<{ name: string; ktp: string; room_id: number | '' }>>([]);
+  // Penempatan penghuni yang sudah bernama tapi belum punya kamar: id tamu -> id kamar fisik
+  const [placements, setPlacements] = useState<Record<number, number>>({});
 
   // Quick Payment Modal if not yet paid
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -140,6 +202,27 @@ export default function CheckInOutCenter() {
       .filter((p) => p.status === 'pending')
       .reduce((sum, p) => sum + Number(p.amount || 0), 0);
   };
+
+  /** Nomor kamar dari baris booking_room pada reservasi ini ('' bila belum ditempatkan). */
+  const roomLabel = (b: Booking | null, bookingRoomId?: number | null) => {
+    if (!b || !bookingRoomId) return '';
+    return b.booking_rooms?.find((br) => br.id === bookingRoomId)?.room?.room_number || '';
+  };
+
+  /** Jumlah malam: pakai snapshot booking_room, fallback ke selisih tanggal header. */
+  const nightsOf = (b: Booking) => {
+    const snapshot = Number(b.booking_rooms?.[0]?.nights || 0);
+    if (snapshot > 0) return snapshot;
+    const diff = Math.ceil((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000);
+    return diff > 0 ? diff : 1;
+  };
+
+  /** Subtotal kamar & layanan dibaca dari snapshot baris, bukan dihitung ulang di browser. */
+  const roomSubtotal = (b: Booking) =>
+    (b.booking_rooms || []).reduce((sum, br) => sum + (Number(br.total_price) || 0), 0);
+
+  const serviceSubtotal = (b: Booking) =>
+    (b.booking_services || []).reduce((sum, bs) => sum + (Number(bs.total) || 0), 0);
 
   /** Sisa yang masih boleh ditagih = total - verified - pending */
   const calculateRemaining = (b: Booking) => {
@@ -241,6 +324,13 @@ export default function CheckInOutCenter() {
     setGuaranteeType('ktp');
     setGuaranteeNote(`KTP Asli an. ${b.customer?.name || 'Tamu'}`);
     setDepositAmount('0');
+
+    // Siapkan baris kosong sebanyak penghuni yang belum punya nama
+    const tercatat = (b.booking_guests || []).filter((g) => g.name).length;
+    const kurang = Math.max(0, Number(b.guest_count || 0) - tercatat);
+    setExtraGuests(Array.from({ length: kurang }, () => ({ name: '', ktp: '', room_id: '' })));
+    setPlacements({});
+
     setIsCheckInModalOpen(true);
   };
 
@@ -253,6 +343,17 @@ export default function CheckInOutCenter() {
       console.error('Failed to reload booking', error);
       return null;
     }
+  };
+
+  /** Buka drawer: tampilkan data tabel seketika, lalu timpa dengan detail lengkap dari server. */
+  const openDetail = async (b: Booking) => {
+    setSelectedBooking(b);
+    setIsDrawerOpen(true);
+    setIsDetailLoading(true);
+
+    const fresh = await reloadBooking(b);
+    if (fresh) setSelectedBooking(fresh);
+    setIsDetailLoading(false);
   };
 
   /** Verifikasi pembayaran yang pending, langsung dari layar check-in (admin only) */
@@ -354,10 +455,45 @@ export default function CheckInOutCenter() {
   // Action: Confirm Check-In + Simpan Jaminan
   const handleConfirmCheckIn = async () => {
     if (!checkInTarget) return;
+
+    // Cek lokal dulu supaya tidak bolak-balik ke server untuk data yang jelas kurang
+    if (extraGuests.some((guest) => !guest.name.trim())) {
+      toast.warning('Nama penghuni masih ada yang kosong. Isi semua baris atau perbaiki jumlah tamunya.');
+      return;
+    }
+
+    const banyakKamar = (checkInTarget.booking_rooms || []).length > 1;
+    const belumDitempatkan = (checkInTarget.booking_guests || []).filter((g) => !g.booking_room_id);
+
+    if (belumDitempatkan.some((guest) => !placements[guest.id])) {
+      toast.warning('Pilih kamar untuk setiap penghuni yang belum ditempatkan.');
+      return;
+    }
+    if (banyakKamar && extraGuests.some((guest) => !guest.room_id)) {
+      toast.warning('Reservasi multi-kamar: pilih kamar untuk setiap penghuni baru.');
+      return;
+    }
+
+    // Penghuni baru + penempatan penghuni lama yang masih kosong (nama sama = tambal kamar)
+    const penghuni = [
+      ...extraGuests
+        .filter((guest) => guest.name.trim())
+        .map((guest) => ({
+          name: guest.name.trim(),
+          ktp: guest.ktp.trim() || undefined,
+          room_id: guest.room_id || undefined,
+        })),
+      ...belumDitempatkan.map((guest) => ({
+        name: guest.name,
+        ktp: guest.ktp || undefined,
+        room_id: placements[guest.id],
+      })),
+    ];
+
     setIsProcessing(true);
     try {
-      // Panggil endpoint check-in backend
-      await api.post(`/api/v1/bookings/${checkInTarget.id}/check-in`);
+      // Panggil endpoint check-in backend (sekalian melengkapi data penghuni bila ada)
+      await api.post(`/api/v1/bookings/${checkInTarget.id}/check-in`, penghuni.length ? { guests: penghuni } : {});
       
       // Simpan jaminan ke localStorage (sebagai audit trail operasional hotel)
       const guaranteeRecord = {
@@ -507,7 +643,7 @@ export default function CheckInOutCenter() {
     { 
       key: 'total', 
       header: 'Total Biaya', 
-      cell: (b) => formatIDR(calculateTotal(b)), 
+      cell: (b) => <span className="money-cell">{formatIDR(calculateTotal(b))}</span>,
       align: 'right' 
     },
     {
@@ -587,10 +723,7 @@ export default function CheckInOutCenter() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setSelectedBooking(b);
-                setIsDrawerOpen(true);
-              }}
+              onClick={() => { void openDetail(b); }}
             >
               Detail
             </Button>
@@ -680,9 +813,9 @@ export default function CheckInOutCenter() {
                 <span className="text-body-small">Durasi Menginap:</span>
                 <span className="text-body-strong">{formatDateShort(checkInTarget.check_in)} s/d {formatDateShort(checkInTarget.check_out)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px', gap: '12px' }}>
                 <span className="text-body-small">Tagihan:</span>
-                <span className="text-body-strong">{formatIDR(calculateTotal(checkInTarget))}</span>
+                <span className="money-total-sm">{formatIDR(calculateTotal(checkInTarget))}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span className="text-body-small">Status Pembayaran:</span>
@@ -702,6 +835,94 @@ export default function CheckInOutCenter() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {(checkInTarget.guest_count || 0) > 0 && (
+                <div>
+                  <label className="text-label mb-1" style={{ display: 'block' }}>
+                    Penghuni Kamar ({(checkInTarget.booking_guests || []).length} dari {checkInTarget.guest_count} tercatat)
+                  </label>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: extraGuests.length ? '12px' : '0' }}>
+                    {(checkInTarget.booking_guests || []).map((guest) => {
+                      const room = roomLabel(checkInTarget, guest.booking_room_id);
+
+                      if (room) {
+                        return (
+                          <div key={guest.id} className="detail-line">
+                            <div className="detail-line-main">
+                              <span className="text-body-strong">{guest.name}</span>
+                              <span className="text-caption">{guest.is_primary ? 'Penanggung jawab' : 'Penghuni'}</span>
+                            </div>
+                            <span className="pill pill-room">Kamar {room}</span>
+                          </div>
+                        );
+                      }
+
+                      // Belum punya kamar: kasir memilih kamarnya sekarang
+                      return (
+                        <div key={guest.id} className="detail-line">
+                          <div className="detail-line-main">
+                            <span className="text-body-strong">{guest.name}</span>
+                            <span className="text-caption">{guest.is_primary ? 'Penanggung jawab' : 'Penghuni'}</span>
+                          </div>
+                          <select
+                            className="ui-select"
+                            style={{ width: 170 }}
+                            value={placements[guest.id] ?? ''}
+                            onChange={(e) => setPlacements((prev) => ({ ...prev, [guest.id]: Number(e.target.value) }))}
+                          >
+                            <option value="">Pilih kamar</option>
+                            {(checkInTarget.booking_rooms || []).map((br) => (
+                              <option key={br.id} value={br.room?.id ?? ''}>Kamar {br.room?.room_number ?? '-'}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {extraGuests.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {extraGuests.map((guest, index) => (
+                        <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1.2fr', gap: '8px', alignItems: 'end' }}>
+                          <Input
+                            placeholder={`Nama penghuni ${index + 2}`}
+                            value={guest.name}
+                            onChange={(e) => setExtraGuests((prev) => prev.map((g, i) => (i === index ? { ...g, name: e.target.value } : g)))}
+                          />
+                          <Input
+                            placeholder="No. KTP (opsional)"
+                            value={guest.ktp}
+                            onChange={(e) => setExtraGuests((prev) => prev.map((g, i) => (i === index ? { ...g, ktp: e.target.value } : g)))}
+                          />
+                          <div className="form-group">
+                            <label className="text-label">Kamar</label>
+                            <select
+                              className="ui-select"
+                              value={guest.room_id}
+                              onChange={(e) => setExtraGuests((prev) => prev.map((g, i) => (
+                                i === index ? { ...g, room_id: e.target.value ? Number(e.target.value) : '' } : g
+                              )))}
+                            >
+                              <option value="">
+                                {(checkInTarget.booking_rooms || []).length > 1 ? 'Pilih kamar' : 'Belum ditentukan'}
+                              </option>
+                              {(checkInTarget.booking_rooms || []).map((br) => (
+                                <option key={br.id} value={br.room?.id ?? ''}>
+                                  Kamar {br.room?.room_number ?? '-'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-caption">
+                        Check-in ditolak sampai seluruh penghuni punya nama.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="text-label mb-1" style={{ display: 'block' }}>Jenis Jaminan Hotel (Wajib Disimpan):</label>
                 <select
@@ -853,7 +1074,7 @@ export default function CheckInOutCenter() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         title="Detail Reservasi"
-        width="600px"
+        width="680px"
         footer={
           <div style={{ display: 'flex', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={() => setIsDrawerOpen(false)}>Tutup</Button>
@@ -873,26 +1094,50 @@ export default function CheckInOutCenter() {
         {selectedBooking && (
           <div className="booking-detail-content">
             <div className="detail-header-card">
-              <div className="detail-code">{selectedBooking.booking_code}</div>
-              <StatusBadge type="booking" value={selectedBooking.status} />
-            </div>
-
-            <div className="detail-section">
-              <h3 className="text-h3">Informasi Tamu</h3>
-              <div className="detail-grid">
-                <div className="detail-item">
-                  <span className="text-label">Nama Tamu</span>
-                  <span className="text-body-strong">{selectedBooking.customer?.name}</span>
+              <div>
+                <div className="detail-code">{selectedBooking.booking_code}</div>
+                <div className="text-caption">
+                  {SOURCE_LABEL[selectedBooking.source || ''] || selectedBooking.source || 'Sumber tidak tercatat'}
+                  {selectedBooking.created_at ? ` · dibuat ${formatDateShort(selectedBooking.created_at)}` : ''}
+                  {selectedBooking.created_by?.name ? ` oleh ${selectedBooking.created_by.name}` : ''}
                 </div>
-                <div className="detail-item">
-                  <span className="text-label">No. Telepon</span>
-                  <span className="text-body-strong">{selectedBooking.customer?.phone || '-'}</span>
-                </div>
+              </div>
+              <div className="detail-header-badges">
+                <StatusBadge type="booking" value={selectedBooking.status} />
+                <span className={`pill ${paymentState(selectedBooking).tone === 'lunas'
+                  ? 'pill-ok'
+                  : paymentState(selectedBooking).tone === 'pending' ? 'pill-warn' : 'pill-bad'}`}>
+                  {paymentState(selectedBooking).label}
+                </span>
               </div>
             </div>
 
+            {isDetailLoading && <p className="text-caption">Memuat detail lengkap dari server...</p>}
+
             <div className="detail-section">
-              <h3 className="text-h3">Rincian Menginap</h3>
+              <h3 className="text-h3">Alur Reservasi</h3>
+              <ol className="flow-steps">
+                {FLOW_LABELS.map((label, i) => (
+                  <li key={label} className={flowStepsDone(selectedBooking.status)[i] ? 'done' : ''}>
+                    <span>{label}</span>
+                  </li>
+                ))}
+              </ol>
+              {selectedBooking.status === 'cancelled' && (
+                <div className="callout callout-danger">
+                  <span>
+                    <span className="callout-judul">Reservasi dibatalkan</span>
+                    <span className="callout-meta">
+                      {selectedBooking.cancel_reason || 'Tanpa alasan tercatat'}
+                      {selectedBooking.cancelled_at ? ` · ${formatDateShort(selectedBooking.cancelled_at)}` : ''}
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="detail-section">
+              <h3 className="text-h3">Jadwal Menginap</h3>
               <div className="detail-grid">
                 <div className="detail-item">
                   <span className="text-label">Check-in</span>
@@ -902,19 +1147,155 @@ export default function CheckInOutCenter() {
                   <span className="text-label">Check-out</span>
                   <span className="text-body-strong">{formatDateShort(selectedBooking.check_out)}</span>
                 </div>
+                <div className="detail-item">
+                  <span className="text-label">Durasi</span>
+                  <span className="text-body-strong">{nightsOf(selectedBooking)} malam</span>
+                </div>
+                <div className="detail-item">
+                  <span className="text-label">Jumlah Tamu</span>
+                  <span className="text-body-strong">
+                    {selectedBooking.guest_count ?? '-'} orang
+                    <span className="text-caption">{' · '}{(selectedBooking.booking_guests || []).length} bernama</span>
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="detail-section">
+              <h3 className="text-h3">Tamu &amp; Kontak</h3>
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <span className="text-label">Penanggung Jawab</span>
+                  <span className="text-body-strong">{selectedBooking.customer?.name || '-'}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="text-label">No. Telepon</span>
+                  <span className="text-body-strong">{selectedBooking.customer?.phone || '-'}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="text-label">Email</span>
+                  <span className="text-body-strong">{selectedBooking.customer?.email || '-'}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="text-label">No. KTP</span>
+                  <span className="text-body-strong">{tampilkanKtp(selectedBooking.customer?.ktp)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="detail-section">
+              <h3 className="text-h3">Penghuni &amp; Penempatan Kamar</h3>
+              {(selectedBooking.booking_guests || []).length > 0 ? (
+                <div className="detail-lines">
+                  {(selectedBooking.booking_guests || []).map((guest) => {
+                    const room = roomLabel(selectedBooking, guest.booking_room_id);
+                    return (
+                      <div key={guest.id} className="detail-line">
+                        <div className="detail-line-main">
+                          <span className="text-body-strong">{guest.name}</span>
+                          <span className="text-caption">KTP {tampilkanKtp(guest.ktp)}</span>
+                        </div>
+                        <span className={`pill ${room ? 'pill-room' : 'pill-warn'}`}>
+                          {room ? `Kamar ${room}` : (guest.is_primary ? 'Penanggung jawab' : 'Belum ditempatkan')}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-caption">Belum ada data penghuni tercatat.</p>
+              )}
+
+              {(selectedBooking.guest_count || 0) > (selectedBooking.booking_guests || []).length && (
+                <div className="callout callout-info">
+                  <span>
+                    <span className="callout-judul">
+                      Baru {(selectedBooking.booking_guests || []).length} dari {selectedBooking.guest_count} penghuni bernama
+                    </span>
+                    <span className="callout-meta">Check-in ditolak sampai nama seluruh penghuni diisi.</span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="detail-section">
+              <h3 className="text-h3">Kamar Dipesan ({(selectedBooking.booking_rooms || []).length})</h3>
+              {(selectedBooking.booking_rooms || []).length > 0 ? (
+                <table className="detail-table">
+                  <thead>
+                    <tr>
+                      <th>Kamar</th><th>Tipe</th><th>Malam</th><th className="num">Harga / malam</th><th className="num">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selectedBooking.booking_rooms || []).map((br) => (
+                      <tr key={br.id}>
+                        <td className="text-body-strong">{br.room?.room_number || '-'}</td>
+                        <td>{br.room?.room_type?.name || '-'}</td>
+                        <td>{br.nights ?? nightsOf(selectedBooking)}</td>
+                        <td className="num">{formatIDR(Number(br.price_per_night) || 0)}</td>
+                        <td className="num">{formatIDR(Number(br.total_price) || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={4}>Subtotal kamar</td>
+                      <td className="num">{formatIDR(roomSubtotal(selectedBooking))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              ) : (
+                <p className="text-caption">Rincian kamar belum termuat — tutup dan buka lagi detail ini.</p>
+              )}
+            </div>
+
+            <div className="detail-section">
+              <h3 className="text-h3">Layanan Tambahan</h3>
+              {(selectedBooking.booking_services || []).length > 0 ? (
+                <table className="detail-table">
+                  <thead>
+                    <tr><th>Layanan</th><th>Qty</th><th className="num">Harga</th><th className="num">Total</th></tr>
+                  </thead>
+                  <tbody>
+                    {(selectedBooking.booking_services || []).map((bs) => (
+                      <tr key={bs.id}>
+                        <td className="text-body-strong">{bs.service?.name || 'Layanan terhapus'}</td>
+                        <td>{bs.quantity ?? '-'}</td>
+                        <td className="num">{formatIDR(Number(bs.price_at_transaction) || 0)}</td>
+                        <td className="num">{formatIDR(Number(bs.total) || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={3}>Subtotal layanan</td>
+                      <td className="num">{formatIDR(serviceSubtotal(selectedBooking))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              ) : (
+                <p className="text-caption">Tidak ada layanan tambahan pada reservasi ini.</p>
+              )}
+            </div>
+
+            {selectedBooking.notes && (
+              <div className="detail-section">
+                <h3 className="text-h3">Catatan Reservasi</h3>
+                <p className="text-body">{selectedBooking.notes}</p>
+              </div>
+            )}
+
+            <div className="detail-section">
               <h3 className="text-h3">Ringkasan Tagihan & Pembayaran</h3>
               <div className="invoice-summary mt-2" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px' }}>
                   <span>Total Tagihan (termasuk pajak)</span>
-                  <span className="text-body-strong">{formatIDR(calculateTotal(selectedBooking))}</span>
+                  <span className="money-total-sm">{formatIDR(calculateTotal(selectedBooking))}</span>
                 </div>
                 <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Sudah Dibayar (Verified)</span>
-                  <span className="text-body-strong" style={{ color: '#15803d' }}>{formatIDR(calculatePaid(selectedBooking))}</span>
+                  <span className="text-body-strong" style={{ color: 'var(--success-fg)' }}>{formatIDR(calculatePaid(selectedBooking))}</span>
                 </div>
                 {calculatePending(selectedBooking) > 0 && (
                   <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -939,26 +1320,99 @@ export default function CheckInOutCenter() {
                     </span>
                   </div>
                 )}
-                <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '6px' }}>
-                  <span>Sisa Tagihan</span>
+                <div className="invoice-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', borderTop: '1px solid var(--line)', marginTop: '4px', paddingTop: '10px' }}>
+                  <span className="money-label">Sisa Tagihan</span>
                   <span
-                    className="text-body-strong"
-                    style={{
-                      color: paymentState(selectedBooking).tone === 'lunas'
-                        ? '#15803d'
-                        : paymentState(selectedBooking).tone === 'pending'
-                          ? 'var(--warning-fg)'
-                          : '#b91c1c',
-                    }}
+                    className={`money-total-sm ${paymentState(selectedBooking).tone === 'lunas'
+                      ? 'money-paid'
+                      : paymentState(selectedBooking).tone === 'pending'
+                        ? 'money-pending'
+                        : 'money-due'}`}
                   >
                     {paymentState(selectedBooking).tone === 'lunas'
                       ? 'LUNAS'
-                      : paymentState(selectedBooking).tone === 'pending'
-                        ? 'Belum ada uang masuk'
-                        : formatIDR(calculateRemaining(selectedBooking))}
+                      : formatIDR(calculateRemaining(selectedBooking))}
                   </span>
                 </div>
               </div>
+            </div>
+
+            {selectedBooking.invoice && (
+              <div className="detail-section">
+                <h3 className="text-h3">Rincian Tagihan</h3>
+                <div className="invoice-summary" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div className="invoice-row">
+                    <span>Subtotal ( kamar + layanan )</span>
+                    <span className="text-body-strong">{formatIDR(Number(selectedBooking.invoice.subtotal) || (roomSubtotal(selectedBooking) + serviceSubtotal(selectedBooking)))}</span>
+                  </div>
+                  {Number(selectedBooking.invoice.discount) > 0 && (
+                    <div className="invoice-row">
+                      <span>Diskon</span>
+                      <span className="text-body-strong">- {formatIDR(Number(selectedBooking.invoice.discount))}</span>
+                    </div>
+                  )}
+                  {Number(selectedBooking.invoice.tax) > 0 && (
+                    <div className="invoice-row">
+                      <span>Pajak</span>
+                      <span className="text-body-strong">{formatIDR(Number(selectedBooking.invoice.tax))}</span>
+                    </div>
+                  )}
+                  <div className="invoice-row">
+                    <span>Tagihan (invoice)</span>
+                    <span className="text-body-strong">{formatIDR(Number(selectedBooking.invoice.total) || 0)}</span>
+                  </div>
+                  <div className="invoice-row">
+                    <span>Nomor Invoice</span>
+                    <span className="text-body-strong">
+                      {selectedBooking.invoice.invoice_number || '-'}
+                      <span className="text-caption">{' · '}{selectedBooking.invoice.status}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="detail-section">
+              <h3 className="text-h3">Riwayat Pembayaran ({(selectedBooking.payments || []).length})</h3>
+              {(selectedBooking.payments || []).length > 0 ? (
+                <>
+                  <table className="detail-table">
+                    <thead>
+                      <tr><th>Tanggal</th><th>Metode</th><th>Status</th><th className="num">Nominal</th></tr>
+                    </thead>
+                    <tbody>
+                      {(selectedBooking.payments || []).map((p) => (
+                        <tr key={p.id}>
+                          <td>
+                            <span className="text-body-strong">{formatDateShort(p.paid_at || p.created_at || selectedBooking.created_at || '')}</span>
+                            <div className="text-caption">
+                              {(p.reference_number || `PAY-${p.id}`)}
+                              {p.type ? ` · ${p.type === 'dp' ? 'uang muka' : p.type === 'final' ? 'pelunasan' : p.type}` : ''}
+                            </div>
+                            {(p.created_by?.name || p.verified_by?.name) && (
+                              <div className="text-caption">
+                                {p.created_by?.name ? `dicatat ${p.created_by.name}` : ''}
+                                {p.verified_by?.name ? ` · diverifikasi ${p.verified_by.name}` : ''}
+                              </div>
+                            )}
+                          </td>
+                          <td>{METHOD_LABEL[p.method] || p.method}</td>
+                          <td>
+                            <StatusBadge type="payment_status" value={p.status} />
+                          </td>
+                          <td className="num">{formatIDR(Number(p.amount) || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-caption">
+                    Tercatat verified {formatIDR(calculatePaid(selectedBooking))}
+                    {calculatePending(selectedBooking) > 0 ? ` · menunggu verifikasi ${formatIDR(calculatePending(selectedBooking))}` : ''}
+                  </p>
+                </>
+              ) : (
+                <p className="text-caption">Belum ada pembayaran tercatat untuk reservasi ini.</p>
+              )}
             </div>
           </div>
         )}

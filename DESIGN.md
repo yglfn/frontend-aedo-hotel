@@ -70,7 +70,10 @@ Definisikan sebagai CSS variables di `:root` (dan petakan ke Tailwind theme bila
   --surface:       #FFFFFF;  /* kartu, panel, sidebar */
   --surface-muted: #F6F8FA;  /* tile netral, header tabel, input readonly */
   --border:        #E4E8EC;  /* garis kartu & tabel */
-  --border-strong: #CBD2D9;  /* input default */
+  --border-strong: #CBD2D9;  /* hover input */
+  --line:          #EAEEF1;  /* garis rambut: pemisah section, tepi kartu/sidebar */
+  --surface-tint:  #FAFBFC;  /* latar blok form, hover baris, panel read-only */
+  --primary-tint:  #EDF7F2;  /* pil menu aktif, chip langkah, avatar */
 
   /* Teks (sedikit kehijauan agar menyatu dengan primer) */
   --ink-900: #12201B;  /* judul, angka besar */
@@ -162,16 +165,19 @@ Aturan: maksimal 3 ukuran berbeda dalam satu kartu. Jangan pakai `text-xs` untuk
 ### 3.4 Spacing, Radius, Shadow
 
 - **Skala spacing (px):** 4, 8, 12, 16, 20, 24, 32, 40, 48. Tidak ada angka di luar skala ini.
-- **Padding kartu:** 20 (desktop) / 16 (mobile). **Gap antar kartu:** 16–24.
+- **Padding kartu:** 24 (desktop) / 16 (mobile). **Gap antar kartu:** 16–24.
 - **Radius:**
-  - `--radius-card: 16px`
-  - `--radius-control: 10px` (input, tombol, tile kecil)
+  - `--radius-card: 16px` (lama; kartu standar kini pakai `--radius-tile`)
+  - `--radius-tile: 12px` (input, tombol, kartu, tile form)
+  - `--radius-control: 10px` (tile kecil lama)
   - `--radius-chip: 999px` (badge, chip, tab pill)
   - `--radius-modal: 20px`
 - **Shadow:** sangat halus, hanya untuk kartu mengambang & modal.
   - `--shadow-card: 0 1px 2px rgba(18,32,27,0.04), 0 4px 16px rgba(18,32,27,0.04)`
+  - `--shadow-hairline: 0 1px 2px rgba(18,32,27,0.03)` (kartu biasa)
   - `--shadow-pop: 0 8px 28px rgba(18,32,27,0.12)` (dropdown, modal, toast)
-  - Kartu biasa: border `1px solid var(--border)` + `--shadow-card`. Tidak pakai shadow besar.
+  - Kartu biasa: border `1px solid var(--line)` + `--shadow-hairline`. Latar halaman putih (`--surface`), kedalaman dibaca lewat garis, bukan abu.
+- **Pola bersih** (`src/styles/patterns.css`): `.text-mikro` (label mikro uppercase), `.section-label` (judul bagian + garis rambut), `.callout`/`-success`/`-info`/`-danger` (banner inline), `.stepper` (penanda langkah alur), `.breadcrumb` (remah jalur di Topbar).
 
 ### 3.5 Gerak (Motion)
 
@@ -240,7 +246,7 @@ Menu yang tidak boleh diakses **disembunyikan**, bukan di-disable. Tetap lindung
 Semua komponen ada di `src/components/ui/`, bertipe TypeScript ketat, tanpa `any`.
 
 ### 5.1 Card
-Putih, border `--border`, radius 16, `--shadow-card`, padding 20. Header kartu: judul `h2` kiri, aksi sekunder kanan (mis. tombol ikon "Lihat semua"). Divider antar bagian pakai `--border`, bukan kartu baru.
+Putih, border `--line`, radius `--radius-tile`, `--shadow-hairline`, padding 24. Header kartu: judul `h2` kiri, aksi sekunder kanan (mis. tombol ikon "Lihat semua"). Divider antar bagian pakai `.section-label` (label mikro + garis rambut), bukan kartu baru.
 
 ### 5.2 KPI Card (terinspirasi referensi 1)
 ```
@@ -315,6 +321,9 @@ Kanan atas, otomatis hilang 4 detik (error 6 detik atau manual). Satu pesan sing
 - Warna grafik berurutan: `primary-600`, `info-fg`, `violet-fg`, `warning-fg`, `success-fg`, `neutral-fg`. Dilarang palet pelangi acak.
 - Selalu sediakan fallback teks/tabel untuk aksesibilitas ("Lihat sebagai tabel").
 - Pustaka grafik: Recharts atau sejenis yang ringan, dengan theming lewat token.
+  Implementasi saat ini memakai komponen buatan sendiri agar tanpa dependensi tambahan:
+  `Donut` (komposisi + legenda), `BarChart` (tren harian), `BreakdownList` (peringkat horizontal)
+  di `components/ui` — SVG/CSS murni, semua warna lewat token. Grafik selalu didampingi tabel angkanya.
 
 ### 5.14 Papan Kamar (Room Board)
 Grid kartu kamar per lantai. Tiap kartu: nomor kamar besar, tipe kamar, badge status, nama tamu (jika `occupied`). Warna tepi kiri 4px mengikuti status. Klik → drawer detail + aksi cepat (ubah status, lapor kerusakan, lihat booking).
@@ -357,7 +366,11 @@ Dua kolom di desktop: kiri form (email, password, tombol "Masuk"), kanan panel `
 - Maintenance: form lapor singkat (kamar, deskripsi, prioritas bila ada), daftar dengan badge status.
 
 ### 6.6 Laporan (Admin)
-Pemilih rentang tanggal di atas, tab jenis laporan, ringkasan angka + grafik + tabel. Tombol "Unduh PDF" dan "Unduh Excel" (blob download dengan state loading). Preset cepat: Hari ini, 7 hari, Bulan ini.
+Satu layar, satu laporan: **Ringkasan**. Tidak ada tab jenis laporan lagi — delapan laporan detail tetap tersedia sebagai endpoint API (`/api/v1/reports/{occupancy,revenue,...}`) untuk QA/Postman, tetapi tidak ditampilkan di aplikasi.
+
+Isi layar (`features/reports`): pemilih periode dengan preset cepat (Hari ini, 7 hari terakhir, Bulan ini, Bulan lalu) + rentang kustom, empat kartu KPI (pendapatan, reservasi, okupansi, menunggu verifikasi), tren pendapatan harian (bar + tabel angka sebagai fallback), komposisi metode bayar & sumber reservasi (donut + legenda bernilai), reservasi per status dan kondisi kamar (daftar berporsi), sorotan periode, lalu tombol **Unduh PDF** dan **Unduh Excel** (blob download dengan state loading) yang mengekspor ringkasan yang sedang ditampilkan.
+
+Periode disimpan di URL (`/reports?from=YYYY-MM-DD&to=YYYY-MM-DD`) supaya laporan bisa ditandai dan tetap sama setelah refresh. Semua angka datang dari server (porsi, rata-rata, pembanding periode sebelumnya) — frontend tidak menghitung ulang. Konten laporan dibungkus `ErrorBoundary` agar satu blok yang bermasalah tidak membuat seluruh halaman putih.
 
 ### 6.7 Pengguna, Tipe Kamar, Layanan, Pengaturan (Admin)
 Tabel + drawer form. Pengguna: toggle aktif/nonaktif dengan konfirmasi, aksi "Reset password". Pengaturan: form terkelompok (Profil hotel, Jam check-in/out, Pajak, Kadaluarsa pembayaran) dengan satu tombol simpan tetap di bawah.

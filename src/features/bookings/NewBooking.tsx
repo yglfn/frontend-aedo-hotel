@@ -12,7 +12,8 @@ interface AvailableRoom {
   id: number;
   room_number: string;
   floor: number;
-  room_type: { id: number; name: string; price: number };
+  // Kolom decimal(12,2) dikirim API sebagai string ("350000.00"), jadi keduanya mungkin
+  room_type: { id: number; name: string; price: number | string; max_person?: number };
 }
 
 interface GuestInput {
@@ -20,6 +21,8 @@ interface GuestInput {
   ktp: string;
   phone: string;
   email: string;
+  /** Kamar fisik yang ditugaskan untuk penghuni ini; '' = belum ditentukan. */
+  room_id: number | '';
   is_primary: boolean;
 }
 
@@ -49,9 +52,15 @@ export default function NewBooking() {
   const [searchError, setSearchError] = useState('');
 
   // --- Step 3: Data Tamu & Ringkasan ---
-  const [primaryGuest, setPrimaryGuest] = useState<GuestInput>({
-    name: '', ktp: '', phone: '', email: '', is_primary: true
-  });
+  // Baris 0 = penanggung jawab reservasi (sekaligus jadi data pelanggan), baris berikutnya
+  // = penghuni lain. Jumlah baris mengikuti "Jumlah Tamu" di langkah 1; kosong boleh, karena
+  // nama penghuni boleh dirampungkan saat check-in (backend menolak check-in bila kurang).
+  const emptyGuest = (): GuestInput => ({ name: '', ktp: '', phone: '', email: '', room_id: '', is_primary: false });
+  const [guests, setGuests] = useState<GuestInput[]>([{ name: '', ktp: '', phone: '', email: '', room_id: '', is_primary: true }]);
+
+  const updateGuest = (index: number, patch: Partial<GuestInput>) => {
+    setGuests((prev) => prev.map((guest, i) => (i === index ? { ...guest, ...patch } : guest)));
+  };
 
   // Pencarian pelanggan terdaftar
   const [customerSearch, setCustomerSearch] = useState('');
@@ -106,7 +115,7 @@ export default function NewBooking() {
 
   const handleSelectCustomer = (cust: CustomerOption) => {
     setSelectedCustomerId(cust.id);
-    setPrimaryGuest({
+    updateGuest(0, {
       name: cust.name,
       ktp: cust.ktp || '',
       phone: cust.phone || '',
@@ -121,8 +130,52 @@ export default function NewBooking() {
     setSelectedCustomerId(null);
     setCustomerSearch('');
     setCustomerResults([]);
-    setPrimaryGuest({ name: '', ktp: '', phone: '', email: '', is_primary: true });
+    updateGuest(0, { name: '', ktp: '', phone: '', email: '', is_primary: true });
   };
+
+  /** Pilihan kamar untuk penempatan penghuni = kamar yang sudah dipilih di langkah 2. */
+  const roomOptions = selectedRooms.map(r => ({
+    id: r.id,
+    label: `Kamar ${r.room_number} · ${r.room_type.name}`,
+  }));
+
+  // Multi-kamar: penempatan wajib dipilih. Satu kamar: tidak ambigu, jadi terisi sendiri.
+  const banyakKamar = selectedRooms.length > 1;
+
+  useEffect(() => {
+    const valid = new Set(selectedRooms.map(r => r.id));
+    const tunggal = selectedRooms.length === 1 ? selectedRooms[0].id : null;
+
+    setGuests((prev) => prev.map((guest) => {
+      if (guest.room_id && !valid.has(guest.room_id)) {
+        return { ...guest, room_id: tunggal ?? '' };
+      }
+      if (!guest.room_id && tunggal) {
+        return { ...guest, room_id: tunggal };
+      }
+      return guest;
+    }));
+  }, [selectedRooms]);
+
+  const roomSelect = (index: number, value: number | '') => (
+    <div className="form-group">
+      <label className="text-label">
+        Kamar
+        {banyakKamar && <span className="input-required">*</span>}
+      </label>
+      <select
+        className="ui-select"
+        value={value}
+        onChange={e => updateGuest(index, { room_id: e.target.value ? Number(e.target.value) : '' })}
+        required={banyakKamar}
+      >
+        <option value="">{banyakKamar ? 'Pilih kamar' : 'Belum ditentukan'}</option>
+        {roomOptions.map(option => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
+      </select>
+    </div>
+  );
 
   const handleSearchRooms = async () => {
     setIsSearchingRooms(true);
@@ -148,7 +201,37 @@ export default function NewBooking() {
     }
   };
 
+  // Jumlah baris tamu selalu sama dengan guest_count: tambah di belakang, potong dari belakang
+  useEffect(() => {
+    const target = Math.max(1, Number(guestCount) || 1);
+
+    setGuests((prev) => {
+      if (prev.length === target) return prev;
+      if (prev.length < target) {
+        const tambahan = Array.from({ length: target - prev.length }, () => emptyGuest());
+        return [...prev, ...tambahan];
+      }
+      return prev.slice(0, target);
+    });
+  }, [guestCount]);
+
   const handleSubmit = async () => {
+    const primary = guests[0];
+
+    if (!primary.name.trim()) {
+      setSubmitError('Nama penanggung jawab reservasi wajib diisi.');
+      return;
+    }
+
+    // Multi-kamar: setiap penghuni yang dikirim harus punya kamar (server juga menolak)
+    if (banyakKamar) {
+      const belum = guests.filter((guest, i) => (i === 0 || guest.name.trim()) && !guest.room_id);
+      if (belum.length) {
+        setSubmitError('Reservasi multi-kamar: pilih kamar untuk setiap penghuni.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
     try {
@@ -156,19 +239,19 @@ export default function NewBooking() {
       let customerId = selectedCustomerId;
       if (!customerId) {
         const custRes = await api.post('/api/v1/customers', {
-          name: primaryGuest.name,
-          phone: primaryGuest.phone,
-          email: primaryGuest.email || undefined,
-          ktp: primaryGuest.ktp,
+          name: primary.name,
+          phone: primary.phone,
+          email: primary.email || undefined,
+          ktp: primary.ktp,
         });
         customerId = custRes.data.data.id;
-      } else if (primaryGuest.email) {
+      } else if (primary.email) {
         // Lengkapi email pelanggan lama bila belum ada / berubah
         await api.put(`/api/v1/customers/${customerId}`, {
-          name: primaryGuest.name,
-          phone: primaryGuest.phone,
-          email: primaryGuest.email,
-          ktp: primaryGuest.ktp,
+          name: primary.name,
+          phone: primary.phone,
+          email: primary.email,
+          ktp: primary.ktp,
         }).catch(() => {});
       }
 
@@ -180,11 +263,16 @@ export default function NewBooking() {
         check_out: checkOut,
         guest_count: Number(guestCount),
         rooms: selectedRooms.map(r => r.id),
-        guests: [{
-          name: primaryGuest.name,
-          ktp: primaryGuest.ktp,
-          is_primary: true,
-        }],
+        // Baris yang namanya kosong tidak dikirim: backend menghitung jumlah tamu dari baris ini
+        guests: guests
+          .filter((guest, index) => index === 0 || guest.name.trim() !== '')
+          .map((guest, index) => ({
+            name: guest.name.trim(),
+            ktp: guest.ktp.trim() || undefined,
+            phone: guest.phone.trim() || undefined,
+            room_id: guest.room_id || undefined,
+            is_primary: index === 0,
+          })),
         notes: notes || undefined,
       };
 
@@ -212,14 +300,17 @@ export default function NewBooking() {
     }
   };
 
-  const totalRoomRatePerNight = selectedRooms.reduce((sum, r) => sum + r.room_type.price, 0);
+  // Wajib Number() di sini: harga datang sebagai string desimal, jadi `sum + price`
+  // akan MERANGKAI teks bila kamar lebih dari satu -> NaN -> total tampil "Rp 0".
+  const totalRoomRatePerNight = selectedRooms.reduce((sum, r) => sum + (Number(r.room_type?.price) || 0), 0);
   const calculateNights = () => {
     if (!checkIn || !checkOut) return 1;
     const diffTime = Math.abs(new Date(checkOut).getTime() - new Date(checkIn).getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays || 1;
   };
-  const estSubtotal = totalRoomRatePerNight * calculateNights();
+  const nights = calculateNights();
+  const estSubtotal = totalRoomRatePerNight * nights;
   const estDiscount = Number(discountAmount) || 0;
   const taxableAmount = Math.max(0, estSubtotal - estDiscount);
   const estTax = (taxableAmount * taxPercentage) / 100;
@@ -339,14 +430,14 @@ export default function NewBooking() {
 
         {step === 3 && (
           <Card title="Data Tamu & Ringkasan">
-            <h3 className="text-h4 mb-2">Informasi Tamu Utama</h3>
+            <h3 className="text-h4 mb-2">Informasi Penanggung Jawab</h3>
 
             <div className="customer-search-box" style={{ position: 'relative', marginBottom: '16px' }}>
               <label className="text-label">Ambil dari Pelanggan Terdaftar (Opsional)</label>
               {selectedCustomerId ? (
                 <div className="selected-customer-chip">
                   <span>
-                    Memakai data pelanggan: <strong>{primaryGuest.name}</strong>
+                    Memakai data pelanggan: <strong>{guests[0].name}</strong>
                   </span>
                   <Button size="sm" variant="ghost" onClick={handleClearCustomer}>Ganti</Button>
                 </div>
@@ -388,29 +479,62 @@ export default function NewBooking() {
             <div className="form-grid mb-4">
               <Input
                 label="Nama Lengkap"
-                value={primaryGuest.name}
-                onChange={e => setPrimaryGuest({ ...primaryGuest, name: e.target.value })}
+                value={guests[0].name}
+                onChange={e => updateGuest(0, { name: e.target.value })}
                 required
               />
               <Input
                 label="No. Telepon / WhatsApp"
-                value={primaryGuest.phone}
-                onChange={e => setPrimaryGuest({ ...primaryGuest, phone: e.target.value })}
+                value={guests[0].phone}
+                onChange={e => updateGuest(0, { phone: e.target.value })}
                 required
               />
               <Input
                 label="Nomor KTP"
-                value={primaryGuest.ktp}
-                onChange={e => setPrimaryGuest({ ...primaryGuest, ktp: e.target.value })}
+                value={guests[0].ktp}
+                onChange={e => updateGuest(0, { ktp: e.target.value })}
               />
               <Input
                 label="Email"
                 type="email"
-                value={primaryGuest.email}
-                onChange={e => setPrimaryGuest({ ...primaryGuest, email: e.target.value })}
+                value={guests[0].email}
+                onChange={e => updateGuest(0, { email: e.target.value })}
                 placeholder="Contoh: tamu@email.com"
               />
+              {roomSelect(0, guests[0].room_id)}
             </div>
+
+            {guests.length > 1 && (
+              <>
+                <h3 className="text-h4 mb-1 border-top pt-4">Penghuni Lain</h3>
+                <p className="text-body-small text-ink-500 mb-3">
+                  {banyakKamar
+                    ? 'Nama dan kamar setiap penghuni wajib dipilih. Nama yang belum diketahui boleh kosong, tetapi harus dilengkapi sebelum check-in.'
+                    : 'Boleh dikosongkan bila namanya belum diketahui. Penghuni otomatis tercatat di kamar yang dipilih.'}
+                </p>
+                <div className="form-grid mb-4">
+                  {guests.slice(1).map((guest, offset) => {
+                    const index = offset + 1;
+                    return (
+                      <div key={index} className="guest-row">
+                        <Input
+                          label={`Nama Penghuni ${index + 1}`}
+                          value={guest.name}
+                          onChange={e => updateGuest(index, { name: e.target.value })}
+                          placeholder="Nama sesuai KTP"
+                        />
+                        <Input
+                          label="No. KTP (opsional)"
+                          value={guest.ktp}
+                          onChange={e => updateGuest(index, { ktp: e.target.value })}
+                        />
+                        {roomSelect(index, guest.room_id)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             
             <h3 className="text-h4 mb-2 border-top pt-4">Catatan</h3>
             <div className="form-grid mb-4">
@@ -433,16 +557,18 @@ export default function NewBooking() {
 
             <div className="summary-section border-top pt-4">
               <h3 className="text-h4 mb-2">Ringkasan Estimasi Tagihan</h3>
-              <div className="summary-row">
-                <span>Kamar Terpilih</span>
-                <strong>{selectedRooms.map(r => r.room_number).join(', ')}</strong>
-              </div>
+              {selectedRooms.map(r => (
+                <div className="summary-row" key={r.id}>
+                  <span>Kamar {r.room_number} · {r.room_type.name}</span>
+                  <span>{formatIDR(Number(r.room_type.price) || 0)} / malam</span>
+                </div>
+              ))}
               <div className="summary-row">
                 <span>Durasi Menginap</span>
-                <strong>{calculateNights()} malam</strong>
+                <strong>{nights} malam</strong>
               </div>
               <div className="summary-row">
-                <span>Subtotal Kamar</span>
+                <span>Subtotal Kamar ({selectedRooms.length} kamar)</span>
                 <span>{formatIDR(estSubtotal)}</span>
               </div>
               {estDiscount > 0 && (
@@ -456,8 +582,8 @@ export default function NewBooking() {
                 <span>{formatIDR(estTax)}</span>
               </div>
               <div className="summary-row total-row">
-                <span>Estimasi Total</span>
-                <span className="text-h3 text-primary-600">{formatIDR(estTotal)}</span>
+                <span className="money-label">Estimasi Total Bayar</span>
+                <span className="money-total">{formatIDR(estTotal)}</span>
               </div>
             </div>
 
@@ -469,7 +595,7 @@ export default function NewBooking() {
 
             <div className="step-actions mt-4 border-top pt-4">
               <Button variant="ghost" onClick={() => setStep(2)}>Kembali</Button>
-              <Button onClick={handleSubmit} isLoading={isSubmitting} disabled={!primaryGuest.name || !primaryGuest.phone}>Konfirmasi & Simpan</Button>
+              <Button onClick={handleSubmit} isLoading={isSubmitting} disabled={!guests[0].name.trim() || !guests[0].phone}>Konfirmasi & Simpan</Button>
             </div>
           </Card>
         )}

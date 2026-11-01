@@ -1,0 +1,196 @@
+/* Pusat Laporan: periode + Ringkasan (angka, grafik, tabel).
+   Semua warna/radius lewat token; pola umum memakai patterns.css. */
+
+.report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.report-subtitle {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-500);
+  margin-top: 4px;
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- Pemilih periode ---- */
+
+.report-period {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.report-preset-group {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  border-radius: var(--radius-chip);
+  background-color: var(--surface-muted);
+}
+
+.report-preset {
+  border: none;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink-500);
+  padding: 6px 14px;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+  transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.report-preset:hover:not(.active) {
+  color: var(--ink-900);
+}
+
+.report-preset.active {
+  background-color: var(--surface);
+  color: var(--ink-900);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(18, 32, 27, 0.1);
+}
+
+.report-preset:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.report-date-field {
+  width: 180px;
+}
+
+.report-period-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-500);
+  margin-bottom: 8px;
+}
+
+/* ---- Isi ringkasan ---- */
+
+.report-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.report-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-section .section-label {
+  margin-bottom: 0;
+}
+
+.report-period-note {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-comparison {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dua kolom: grafik + rincian, menumpuk di layar sempit */
+.report-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .report-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+.report-highlights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---- Keadaan muat / error ---- */
+
+.report-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.report-skeleton-block {
+  height: 92px;
+  border-radius: var(--radius-tile);
+  background: linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-tint) 37%, var(--surface-muted) 63%);
+  background-size: 400% 100%;
+  animation: report-shimmer 1.4s ease-in-out infinite;
+}
+
+.report-skeleton-block.is-tall {
+  height: 220px;
+}
+
+@keyframes report-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-skeleton-block {
+    animation: none;
+  }
+}
+
+.report-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}

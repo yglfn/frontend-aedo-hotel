@@ -26,11 +26,20 @@
 .detail-header-card {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background-color: var(--surface-muted);
+  align-items: flex-start;
+  gap: 12px;
+  background-color: var(--surface-tint);
   padding: 16px;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--border);
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--line);
+}
+
+.detail-header-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
 }
 
 .detail-code {
@@ -50,8 +59,8 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
   padding: 16px;
 }
 
@@ -59,6 +68,142 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+}
+
+/* Alur reservasi: langkah yang sudah dilewati ditandai, tanpa tanggal karangan */
+.flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  counter-reset: alur;
+}
+
+.flow-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--line);
+  background-color: var(--surface-tint);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-400);
+}
+
+.flow-steps li::before {
+  counter-increment: alur;
+  content: counter(alur);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--surface-muted);
+  color: var(--ink-500);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-steps li.done {
+  background-color: var(--primary-tint);
+  border-color: transparent;
+  color: var(--primary-700);
+}
+
+.flow-steps li.done::before {
+  background-color: var(--primary-600);
+  color: var(--ink-inverse);
+}
+
+/* Daftar satu baris per item (penghuni, jaminan, dsb.) */
+.detail-lines {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
+  overflow: hidden;
+}
+
+.detail-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.detail-line + .detail-line {
+  border-top: 1px solid var(--line);
+}
+
+.detail-line-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Penanda kecil berlabel warna */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-chip);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background-color: var(--surface-muted);
+  color: var(--ink-500);
+  white-space: nowrap;
+}
+
+.pill-ok { background-color: var(--success-bg); color: var(--success-fg); }
+.pill-warn { background-color: var(--warning-bg); color: var(--warning-fg); }
+.pill-bad { background-color: var(--danger-bg); color: var(--danger-fg); }
+.pill-room { background-color: var(--primary-tint); color: var(--primary-700); }
+
+/* Tabel mini di dalam drawer: kamar, layanan, riwayat bayar */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  border: 1px solid var(--line);
+}
+
+.detail-table th,
+.detail-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  color: var(--ink-700);
+}
+
+.detail-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+  background-color: var(--surface-tint);
+}
+
+.detail-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.detail-table tfoot td {
+  font-weight: 700;
+  color: var(--ink-900);
+  background-color: var(--surface-tint);
+}
+
+.detail-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .invoice-summary {
@@ -84,5 +229,15 @@
   }
   .search-wrapper {
     max-width: 100%;
+  }
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .detail-table {
+    font-size: 12px;
+  }
+  .detail-table th,
+  .detail-table td {
+    padding: 8px;
   }
 }

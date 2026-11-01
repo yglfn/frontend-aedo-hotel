@@ -1,4 +1,28 @@
-/* Pengaturan sistem: kontrol terkunci (fieldset[disabled]) sampai "Ubah Pengaturan" ditekan */
+/* Pengaturan sistem: kontrol terkunci (fieldset[disabled]) sampai "Ubah Pengaturan" ditekan,
+   dan tata letak dua kolom (form + ringkasan) supaya area kanan tidak kosong di layar lebar. */
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Form di kiri, ringkasan sticky di kanan; runtuh jadi satu kolom di layar sempit */
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
 .settings-fields {
   border: 0;
   margin: 0;
@@ -9,11 +33,133 @@
   gap: 24px;
 }
 
+/* Grid field dalam kartu: dua kolom rapi, tidak lagi satu kolom memanjang */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.settings-span {
+  grid-column: 1 / -1;
+}
+
+.settings-area {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-tile);
+  background-color: var(--surface);
+  color: var(--ink-900);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 120ms cubic-bezier(0.2, 0, 0, 1), box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.settings-area:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong);
+}
+
+.settings-area:focus {
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(18, 144, 111, 0.16);
+}
+
+/* Kotak centang jadi baris berbingkai, bukan teks menggantung */
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
+  background-color: var(--surface-tint);
+}
+
+.settings-check input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--primary-600);
+  flex: none;
+}
+
+.settings-check-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.settings-check-hint {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+}
+
+/* Ringkasan nilai aktif: dl tipis bergaris rambut */
+.settings-summary {
+  position: sticky;
+  top: 88px;
+}
+
+.settings-summary-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.settings-summary-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-summary-row dt {
+  color: var(--ink-400);
+}
+
+.settings-summary-row dd {
+  color: var(--ink-900);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-summary-note {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-400);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
 /* Mode baca: nilai tetap enak dibaca, hanya tidak bisa diketik */
 .settings-fields[disabled] .input-field,
-.settings-fields[disabled] textarea,
-.settings-fields[disabled] select {
-  background-color: var(--surface-muted);
+.settings-fields[disabled] .settings-area {
+  background-color: var(--surface-tint);
   color: var(--ink-700);
   cursor: default;
 }
@@ -23,9 +169,18 @@
   display: none;
 }
 
-.settings-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
+@media (max-width: 1180px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

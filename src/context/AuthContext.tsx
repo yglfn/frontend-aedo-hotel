@@ -17,6 +17,10 @@ export interface HotelSettings {
   hotel_phone?: string;
   hotel_email?: string;
   tax_percentage?: number;
+  // Jam operasional - ditampilkan apa adanya di halaman login supaya petugas punya
+  // acuan sebelum melayani tamu (sumber: GET /api/v1/settings, publik).
+  default_check_in?: string;
+  default_check_out?: string;
 }
 
 interface AuthContextType {
@@ -63,6 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           hotel_phone: res.data.data.hotel_phone || '',
           hotel_email: res.data.data.hotel_email || '',
           tax_percentage: Number(res.data.data.tax_percentage || 0),
+          default_check_in: res.data.data.default_check_in || '',
+          default_check_out: res.data.data.default_check_out || '',
         });
       }
     } catch (err) {

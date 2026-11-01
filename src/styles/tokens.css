@@ -21,6 +21,13 @@
   --primary-700: #0A624D;  /* hover */
   --primary-800: #084C3C;  /* kartu promo/highlight gelap */
 
+  /* Gaya bersih: garis rambut, latar lembut, pil aksen.
+     Dipakai pola di patterns.css + sidebar/input/card agar konsisten. */
+  --line:          #EAEEF1;  /* pemisah sehalis mungkin (lebih lembut dari --border) */
+  --surface-tint:  #FAFBFC;  /* latar blok form, bukan abu kontras */
+  --primary-tint:  #EDF7F2;  /* pil menu aktif, chip langkah */
+  --radius-tile: 12px;       /* input, kartu, tile form */
+
   /* Semantik */
   --success-bg: #DFF4E8;  --success-fg: #1B7F4E;
   --info-bg:    #E3EEFE;  --info-fg:    #2B65D9;
@@ -32,6 +39,14 @@
   /* Fokus */
   --focus-ring: 0 0 0 3px rgba(14, 124, 97, 0.28);
 
+  /* Panel gelap (login & highlight card di atas primary-800).
+     Dipakai lewat token, bukan rgba mentah di komponen (DESIGN.md §2). */
+  --on-dark:       #FFFFFF;
+  --on-dark-muted: #CFE8E0;
+  --on-dark-line:  rgba(255, 255, 255, 0.16);
+  --on-dark-grid:  rgba(255, 255, 255, 0.05);
+  --on-dark-chip:  rgba(255, 255, 255, 0.08);
+
   /* Radius */
   --radius-card: 16px;
   --radius-control: 10px; /* input, tombol, tile kecil */
@@ -41,4 +56,5 @@
   /* Shadow */
   --shadow-card: 0 1px 2px rgba(18,32,27,0.04), 0 4px 16px rgba(18,32,27,0.04);
   --shadow-pop: 0 8px 28px rgba(18,32,27,0.12); /* dropdown, modal, toast */
+  --shadow-hairline: 0 1px 2px rgba(18,32,27,0.03); /* kartu polos: batas garis, nyaris tanpa bayangan */
 }

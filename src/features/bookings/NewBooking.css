@@ -78,6 +78,17 @@
   gap: 16px;
 }
 
+/* Satu baris penghuni: nama + KTP + kamar, menempuh dua kolom grid. */
+.guest-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 2fr 1.4fr 1.2fr;
+  gap: 16px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -151,11 +162,12 @@
 }
 
 .total-row {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   margin-top: 8px;
   padding-top: 16px;
   color: var(--ink-900);
-  align-items: center;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .step-actions {
@@ -232,5 +244,13 @@
 @media (max-width: 640px) {
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .guest-row {
+    grid-template-columns: 1fr;
+  }
+
+  .total-row {
+    flex-wrap: wrap;
   }
 }

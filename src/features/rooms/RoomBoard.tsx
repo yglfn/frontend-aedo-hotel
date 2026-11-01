@@ -275,10 +275,8 @@ export default function RoomBoard() {
       header: 'Tipe Kamar',
       cell: (r: Room) => (
         <div>
-          <div style={{ fontWeight: 600 }}>{r.room_type?.name || 'Standard'}</div>
-          <div style={{ fontSize: '12px', color: 'var(--ink-500)' }}>
-            {formatIDR(r.room_type?.price || 0)} / malam
-          </div>
+          <div className="text-body-strong">{r.room_type?.name || 'Standard'}</div>
+          <div className="price-cell">{formatIDR(Number(r.room_type?.price) || 0)} / malam</div>
         </div>
       ),
     },
@@ -387,8 +385,9 @@ export default function RoomBoard() {
                         <div className="room-card-body">
                           <div className="room-type">{room.room_type?.name ?? 'Standard'}</div>
                           {room.room_type?.price && (
-                            <div style={{ fontSize: '11px', color: 'var(--ink-400)' }}>
-                              {formatIDR(room.room_type.price)}
+                            <div className="room-price">
+                              <strong>{formatIDR(Number(room.room_type.price) || 0)}</strong>
+                              <span>/ malam</span>
                             </div>
                           )}
                           {room.status === 'occupied' && room.current_guest && (
@@ -485,7 +484,7 @@ export default function RoomBoard() {
             </div>
             <div className="detail-row">
               <span className="text-label">Tarif per Malam</span>
-              <span className="text-body-strong">{formatIDR(selectedRoom.room_type?.price ?? 0)}</span>
+              <span className="money-total-sm">{formatIDR(Number(selectedRoom.room_type?.price) || 0)}</span>
             </div>
             <div className="detail-row">
               <span className="text-label">Lantai</span>

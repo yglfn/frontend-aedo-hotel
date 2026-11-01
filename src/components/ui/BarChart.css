@@ -1,0 +1,115 @@
+/* Grafik batang tren: grid rambut, satu warna primer, tooltip halus (DESIGN.md 3.5 & 5.13). */
+
+.barchart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.barchart-head {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.barchart-plot {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 184px;
+}
+
+.barchart-col {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.barchart-col:hover,
+.barchart-col:focus-visible {
+  outline: none;
+}
+
+.barchart-col:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-radius: 6px;
+}
+
+.barchart-track {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  /* garis grid tiap 25%, digambar per kolom agar tidak menimpa label sumbu */
+  background-image: linear-gradient(to top, var(--line) 1px, transparent 1px);
+  background-size: 100% 25%;
+  background-repeat: repeat-y;
+}
+
+.barchart-bar {
+  width: 100%;
+  max-width: 26px;
+  margin: 0 auto;
+  background-color: var(--primary-600);
+  border-radius: 4px 4px 0 0;
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.barchart-bar.is-empty {
+  background-color: var(--line);
+}
+
+.barchart-col:hover .barchart-bar:not(.is-empty) {
+  background-color: var(--primary-700);
+}
+
+.barchart-x {
+  flex: none;
+  height: 28px;
+  padding-top: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-400);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.barchart-tip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -4px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: var(--surface);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.barchart-col:hover .barchart-tip,
+.barchart-col:focus-visible .barchart-tip {
+  opacity: 1;
+}
+
+.barchart-empty {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-400);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barchart-bar,
+  .barchart-tip {
+    transition: none;
+  }
+}

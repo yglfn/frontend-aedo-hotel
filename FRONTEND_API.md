@@ -618,13 +618,14 @@ await axios.post(`/api/v1/payments/${paymentId}/proof`, formData, {
 ### 6.15 Laporan (Admin only)
 
 Semua laporan mendukung parameter:
-- `?from=2026-11-01&to=2026-11-30` — filter periode
-- `?format=json` — default, kembalikan JSON
+- `?from=2026-11-01&to=2026-11-30` — filter periode (default: awal bulan s/d hari ini)
+- `?format=json` — **default**; payload inilah yang dibaca layar Laporan di aplikasi (angka, grafik, tabel)
 - `?format=pdf` — download file PDF
 - `?format=xlsx` — download file Excel
 
 | Method | URL | Deskripsi |
 |---|---|---|
+| `GET` | `/api/v1/reports/summary` | Ringkasan semua laporan + pembanding periode sebelumnya. Ini satu-satunya laporan yang ditampilkan di layar Pusat Laporan dan ikut bisa diunduh PDF/Excel |
 | `GET` | `/api/v1/reports/occupancy` | Tingkat okupansi kamar |
 | `GET` | `/api/v1/reports/revenue` | Pendapatan harian |
 | `GET` | `/api/v1/reports/reservations` | Daftar reservasi |
@@ -633,6 +634,29 @@ Semua laporan mendukung parameter:
 | `GET` | `/api/v1/reports/shifts` | Laporan per shift pegawai |
 | `GET` | `/api/v1/reports/sources` | Sumber reservasi (walk-in, traveloka, dll) |
 | `GET` | `/api/v1/reports/housekeeping` | Laporan housekeeping |
+
+**Yang sudah disediakan payload JSON** supaya layar laporan tidak perlu menghitung ulang:
+
+| Laporan | Angka siap pakai | Daftar baris |
+|---|---|---|
+| `summary` | `revenue.*`, `occupancy.*`, `reservations.by_status`, `housekeeping.*`, `shifts.*`, `rooms.*`, `highlights.*` | `revenue_trend`, `payment_mix`, `booking_sources` |
+| `revenue` | `average_per_day`, `average_per_txn`, `cash/transfer/qris_revenue`, `pending_*`, `refund_total`, `best_day` | `daily[]` |
+| `occupancy` | `occupancy_rate`, `empty_room_nights`, `idle_rooms`, `busiest_room` | `per_room[]` (`room_type`, `room_rate`) |
+| `reservations` | `summary.total_value`, `average_value`, `average_nights`, `collected`, `outstanding`, `cancellation_rate` | `bookings[]` |
+| `transactions` | `summary.total_amount`, `verified_amount`, `pending_amount`, `failed_amount`, `refund_amount` | `payments[]`, `by_status[]`, `by_method[]` |
+| `payment-methods` | `total_amount`, `total_count` | `data[]` (`label`, `share_percent`, `count_percent`, `average`) |
+| `shifts` | `summary.total_collected`, `average_collected`, `open_shifts` | `shifts[]` (`duration_hours`) |
+| `sources` | `total_count`, `total_revenue` | `data[]` (`label`, `share_percent`, `average_value`) |
+| `housekeeping` | `summary.completion_rate`, `average_hours`, `unassigned` | `tasks[]`, `by_staff[]` |
+
+Setiap laporan detail juga mengirim `comparison` (periode sebelumnya dengan panjang sama).
+
+**Layar Laporan (Admin) hanya menampilkan Ringkasan.** Delapan tab laporan detail sudah dihapus dari aplikasi; endpoint-nya tetap ada untuk kebutuhan QA/Postman/integrasi (`?format=json|pdf|xlsx`). Ringkasan bisa diunduh sebagai `?format=pdf` (satu dokumen berisi tabel ukuran utama, metode bayar, sumber, status reservasi, operasional, tren harian, sorotan) atau `?format=xlsx` (baris `Bagian | Ukuran | Nilai`).
+
+Aturan penting untuk frontend:
+- `comparison.change_percent` bisa `null` bila periode pembanding kosong. Tampilkan "Belum ada pembanding", **bukan** 0%.
+- Kolom uang agregat sudah berupa angka dari server. Kolom model lama (`total_price`, `amount`) masih string desimal — pakai `Number()` sebelum berhitung.
+- Laporan tidak membawa KTP tamu; cukup nama tamu untuk identifikasi.
 
 **Contoh download PDF di React:**
 ```ts

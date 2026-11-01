@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { toast } from '../../components/ui/Toast';
 import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import { api } from '../../lib/api';
+import { formatIDR } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
 import './SettingsPage.css';
 
@@ -144,9 +146,33 @@ export default function SettingsPage() {
     return <div className="text-ink-500 py-8">Memuat pengaturan sistem...</div>;
   }
 
+  /* Nilai turunan untuk ringkasan; dibaca dari isian form supaya kolom kanan ikut berubah
+     saat admin mengedit, tanpa perlu request tambahan. */
+  const pajak = Number(settings.tax_percentage) || 0;
+  const dpMinimal = Number(settings.min_dp_percentage) || 0;
+  const plafon = Number(settings.auto_verify_max_amount) || 0;
+
+  const ringkasan = [
+    { label: 'Nama hotel', value: settings.hotel_name || '-' },
+    { label: 'Jam operasional', value: `${settings.default_check_in} – ${settings.default_check_out}` },
+    { label: 'Pajak / PPN', value: `${pajak}%` },
+    {
+      label: 'DP check-in',
+      value: dpMinimal > 0 ? `${dpMinimal}% dari tagihan` : 'Tidak wajib',
+    },
+    {
+      label: 'Verifikasi transfer',
+      value: !settings.auto_verify_transfers
+        ? 'Manual (admin)'
+        : plafon > 0
+          ? `Otomatis s/d ${formatIDR(plafon)}`
+          : 'Otomatis, tanpa plafon',
+    },
+  ];
+
   return (
-    <div style={{ maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+    <div className="settings-page">
+      <div className="settings-head">
         <div>
           <h1 className="text-h1">Pengaturan Sistem</h1>
           <p className="text-body-small text-ink-500 mt-1">Konfigurasi operasional dan profil Aedo Hotel Syariah.</p>
@@ -159,129 +185,138 @@ export default function SettingsPage() {
       </div>
 
       {errorMsg && (
-        <div
-          style={{
-            backgroundColor: 'var(--danger-bg)',
-            color: 'var(--danger-fg)',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-control)',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-        >
-          {errorMsg}
+        <div className="callout callout-danger" role="alert">
+          <AlertCircle size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      <form onSubmit={handleSave}>
-        {/* Semua kontrol terkunci sampai tombol "Ubah Pengaturan" ditekan */}
-        <fieldset className="settings-fields" disabled={!isEditing}>
-          <Card title="Profil Hotel">
-            <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-              <Input
-                label="Nama Hotel"
-                value={settings.hotel_name}
-                onChange={(e) => setSettings({ ...settings, hotel_name: e.target.value })}
-                required
-              />
-              <Input
-                label="Nomor Telepon / Hotline"
-                value={settings.hotel_phone}
-                onChange={(e) => setSettings({ ...settings, hotel_phone: e.target.value })}
-                required
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label className="text-label">Alamat Lengkap</label>
-                <textarea
-                  style={{
-                    width: '100%',
-                    minHeight: '80px',
-                    padding: '12px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-control)',
-                    fontFamily: 'inherit',
-                    fontSize: '14px',
-                  }}
-                  value={settings.hotel_address}
-                  onChange={(e) => setSettings({ ...settings, hotel_address: e.target.value })}
+      <div className="settings-layout">
+        <form onSubmit={handleSave}>
+          {/* Semua kontrol terkunci sampai tombol "Ubah Pengaturan" ditekan */}
+          <fieldset className="settings-fields" disabled={!isEditing}>
+            <Card title="Profil Hotel">
+              <div className="settings-grid">
+                <Input
+                  label="Nama Hotel"
+                  value={settings.hotel_name}
+                  onChange={(e) => setSettings({ ...settings, hotel_name: e.target.value })}
                   required
                 />
-              </div>
-            </div>
-          </Card>
-
-          <Card title="Waktu Operasional & Pajak">
-            <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <Input
-                label="Jam Standar Check-in"
-                type="time"
-                value={settings.default_check_in}
-                onChange={(e) => setSettings({ ...settings, default_check_in: e.target.value })}
-                required
-              />
-              <Input
-                label="Jam Standar Check-out"
-                type="time"
-                value={settings.default_check_out}
-                onChange={(e) => setSettings({ ...settings, default_check_out: e.target.value })}
-                required
-              />
-              <Input
-                label="Persentase Pajak / PPN (%)"
-                type="number"
-                step="0.01"
-                value={settings.tax_percentage}
-                onChange={(e) => setSettings({ ...settings, tax_percentage: e.target.value })}
-                required
-              />
-              <Input
-                label="Minimal DP untuk Check-In (%)"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={settings.min_dp_percentage}
-                onChange={(e) => setSettings({ ...settings, min_dp_percentage: e.target.value })}
-                hint="0 = tidak wajib DP. Di atas 0: ini ambang cek-in sekaligus nominal uang muka default di meja."
-                required
-              />
-              <Input
-                label="Plafon Verifikasi Otomatis (Rp)"
-                type="number"
-                min="0"
-                step="50000"
-                value={settings.auto_verify_max_amount}
-                onChange={(e) => setSettings({ ...settings, auto_verify_max_amount: e.target.value })}
-                hint="0 = tanpa plafon. Di atas nilai ini pembayaran tetap butuh persetujuan admin."
-                required
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px' }}>
-                <input
-                  type="checkbox"
-                  id="auto_verify_transfers"
-                  checked={settings.auto_verify_transfers}
-                  onChange={(e) => setSettings({ ...settings, auto_verify_transfers: e.target.checked })}
-                  style={{ width: '16px', height: '16px' }}
+                <Input
+                  label="Nomor Telepon / Hotline"
+                  value={settings.hotel_phone}
+                  onChange={(e) => setSettings({ ...settings, hotel_phone: e.target.value })}
+                  required
                 />
-                <label htmlFor="auto_verify_transfers" className="text-label">
-                  Verifikasi otomatis transfer/QRIS (butuh nomor referensi unik + bukti terunggah)
-                </label>
+                <div className="input-group settings-span">
+                  <label className="input-label text-label" htmlFor="hotel_address">
+                    Alamat Lengkap<span className="input-required">*</span>
+                  </label>
+                  <textarea
+                    id="hotel_address"
+                    className="settings-area"
+                    value={settings.hotel_address}
+                    onChange={(e) => setSettings({ ...settings, hotel_address: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
-            </div>
-          </Card>
-        </fieldset>
+            </Card>
 
-        {isEditing && (
-          <div className="settings-actions">
-            <Button type="button" variant="ghost" onClick={handleCancelEdit}>
-              Batal
-            </Button>
-            <Button type="submit" isLoading={isSaving} disabled={!isDirty}>
-              Simpan Perubahan
-            </Button>
-          </div>
-        )}
-      </form>
+            <Card title="Waktu Operasional &amp; Pajak">
+              <div className="settings-grid">
+                <Input
+                  label="Jam Standar Check-in"
+                  type="time"
+                  value={settings.default_check_in}
+                  onChange={(e) => setSettings({ ...settings, default_check_in: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Jam Standar Check-out"
+                  type="time"
+                  value={settings.default_check_out}
+                  onChange={(e) => setSettings({ ...settings, default_check_out: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Persentase Pajak / PPN (%)"
+                  type="number"
+                  step="0.01"
+                  value={settings.tax_percentage}
+                  onChange={(e) => setSettings({ ...settings, tax_percentage: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Minimal DP untuk Check-In (%)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={settings.min_dp_percentage}
+                  onChange={(e) => setSettings({ ...settings, min_dp_percentage: e.target.value })}
+                  hint="0 = tidak wajib DP. Di atas 0: ini ambang cek-in sekaligus nominal uang muka default di meja."
+                  required
+                />
+                <Input
+                  label="Plafon Verifikasi Otomatis (Rp)"
+                  type="number"
+                  min="0"
+                  step="50000"
+                  value={settings.auto_verify_max_amount}
+                  onChange={(e) => setSettings({ ...settings, auto_verify_max_amount: e.target.value })}
+                  hint="0 = tanpa plafon. Di atas nilai ini pembayaran tetap butuh persetujuan admin."
+                  required
+                />
+                <div className="settings-check settings-span">
+                  <input
+                    type="checkbox"
+                    id="auto_verify_transfers"
+                    checked={settings.auto_verify_transfers}
+                    onChange={(e) => setSettings({ ...settings, auto_verify_transfers: e.target.checked })}
+                  />
+                  <label className="settings-check-label" htmlFor="auto_verify_transfers">
+                    <span className="text-body-strong">Verifikasi otomatis transfer / QRIS</span>
+                    <span className="settings-check-hint">
+                      Hanya berlaku bila nomor referensi unik dan bukti pembayaran terunggah.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </Card>
+          </fieldset>
+
+          {isEditing && (
+            <div className="settings-actions">
+              <Button type="button" variant="ghost" onClick={handleCancelEdit}>
+                Batal
+              </Button>
+              <Button type="submit" isLoading={isSaving} disabled={!isDirty}>
+                Simpan Perubahan
+              </Button>
+            </div>
+          )}
+        </form>
+
+        <aside className="settings-summary">
+          <Card title="Ringkasan Aktif">
+            <dl className="settings-summary-list">
+              {ringkasan.map((item) => (
+                <div className="settings-summary-row" key={item.label}>
+                  <dt>{item.label}</dt>
+                  <dd>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="settings-summary-note">
+              {isEditing
+                ? 'Ringkasan mengikuti isian. Nilai baru berlaku setelah disimpan.'
+                : 'Klik “Ubah Pengaturan” untuk mengedit. Nilai ini dipakai sistem untuk tagihan, DP check-in, dan verifikasi pembayaran.'}
+            </p>
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 @import './tokens.css';
+@import './patterns.css';
 
 * {
   box-sizing: border-box;
@@ -9,7 +10,7 @@
 
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background-color: var(--bg-app);
+  background-color: var(--surface);
   color: var(--ink-700);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;

@@ -11,7 +11,8 @@ import {
   DollarSign, 
   TrendingUp, 
   Clock, 
-  Building
+  Building,
+  BarChart3
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { KpiCard } from '../../components/ui/KpiCard';
@@ -201,26 +202,26 @@ export default function Dashboard() {
         <section className="dashboard-section">
           <Card title={`Akuntabilitas Transaksi Shift Berjalan (#Shift-${data.shift.shift_id})`}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', padding: '8px 0' }}>
-              <div style={{ padding: '12px 16px', background: 'var(--surface-sunken)', borderRadius: '8px' }}>
+              <div style={{ padding: '12px 16px', background: 'var(--surface-tint)', borderRadius: 'var(--radius-tile)', border: '1px solid var(--line)' }}>
                 <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>Petugas Shift</span>
                 <span className="text-body-strong">{data.shift.user_name || user?.name}</span>
                 <span className="text-body-small text-ink-500" style={{ display: 'block', marginTop: '2px' }}>
                   Mulai: {formatDateShort(data.shift.started_at)}
                 </span>
               </div>
-              <div style={{ padding: '12px 16px', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '8px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                <span className="text-label" style={{ display: 'block', marginBottom: '4px', color: '#15803d' }}>Total Kas Tunai (Fisik)</span>
-                <span className="text-h3" style={{ color: '#15803d' }}>{formatIDR(data.shift.cash_amount)}</span>
+              <div style={{ padding: '12px 16px', background: 'var(--success-bg)', borderRadius: 'var(--radius-tile)', border: '1px solid transparent' }}>
+                <span className="text-label" style={{ display: 'block', marginBottom: '4px', color: 'var(--success-fg)' }}>Total Kas Tunai (Fisik)</span>
+                <span className="money-total-sm" style={{ color: 'var(--success-fg)' }}>{formatIDR(data.shift.cash_amount)}</span>
                 <span className="text-body-small text-ink-500" style={{ display: 'block', marginTop: '2px' }}>Uang di laci kasir</span>
               </div>
-              <div style={{ padding: '12px 16px', background: 'var(--surface-sunken)', borderRadius: '8px' }}>
+              <div style={{ padding: '12px 16px', background: 'var(--surface-tint)', borderRadius: 'var(--radius-tile)', border: '1px solid var(--line)' }}>
                 <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>Non-Tunai (Transfer/QRIS)</span>
-                <span className="text-h3">{formatIDR(data.shift.non_cash_amount)}</span>
+                <span className="money-total-sm">{formatIDR(data.shift.non_cash_amount)}</span>
                 <span className="text-body-small text-ink-500" style={{ display: 'block', marginTop: '2px' }}>Rekening / QRIS</span>
               </div>
-              <div style={{ padding: '12px 16px', background: 'var(--surface-sunken)', borderRadius: '8px' }}>
-                <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>Total Seluruh Transaksi</span>
-                <span className="text-h3">{formatIDR(data.shift.total_amount)}</span>
+              <div style={{ padding: '12px 16px', background: 'var(--primary-tint)', borderRadius: 'var(--radius-tile)', border: '1px solid transparent' }}>
+                <span className="money-label" style={{ display: 'block', marginBottom: '4px' }}>Total Seluruh Transaksi</span>
+                <span className="money-total">{formatIDR(data.shift.total_amount)}</span>
                 <span className="text-body-small text-ink-500" style={{ display: 'block', marginTop: '2px' }}>
                   {data.shift.transaction_count} transaksi tercatat
                 </span>
@@ -289,6 +290,15 @@ export default function Dashboard() {
             subtitle="Terima uang/transfer"
             icon={<FileText />}
           />
+          {/* Laporan khusus admin (DESIGN.md 5.3: shortcut mengikuti role) */}
+          {isAdmin && (
+            <ShortcutTile
+              to="/reports"
+              title="Ringkasan Laporan"
+              subtitle="Angka penting & tren"
+              icon={<BarChart3 />}
+            />
+          )}
         </div>
       </section>
 

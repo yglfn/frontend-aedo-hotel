@@ -192,10 +192,24 @@ export default function PaymentForm() {
                 Ada pembayaran pending yang belum diverifikasi untuk reservasi ini.
               </div>
             )}
-            {availableRemaining !== null && availableRemaining > 0 && (
-              <span className="text-body-small text-ink-500">
-                Sisa tagihan: {formatIDR(availableRemaining)}
-              </span>
+            {availableRemaining !== null && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-tile)',
+                  background: 'var(--surface-tint)',
+                }}
+              >
+                <span className="money-label">Sisa Tagihan</span>
+                <span className={`money-total ${availableRemaining > 0 ? 'money-due' : 'money-paid'}`}>
+                  {availableRemaining > 0 ? formatIDR(availableRemaining) : 'LUNAS'}
+                </span>
+              </div>
             )}
           </div>
           <div className="form-group">
