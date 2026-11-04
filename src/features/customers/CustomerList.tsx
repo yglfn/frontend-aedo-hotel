@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input';
 import { Drawer } from '../../components/ui/Drawer';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
+import { maskKtp } from '../../lib/format';
 
 interface Customer {
   id: number;
@@ -48,7 +49,7 @@ export default function CustomerList() {
 
   const columns: Column<Customer>[] = [
     { key: 'name', header: 'Nama Lengkap', cell: (c) => <span className="text-body-strong">{c.name}</span> },
-    { key: 'ktp', header: 'No. KTP', cell: (c) => c.ktp || '-' },
+    { key: 'ktp', header: 'No. KTP', cell: (c) => c.ktp ? maskKtp(c.ktp) : '-' },
     { key: 'phone', header: 'Telepon / WA', cell: (c) => c.phone || '-' },
     { key: 'email', header: 'Email', cell: (c) => c.email || '-' },
     { key: 'bookings', header: 'Total Menginap', align: 'right', cell: (c) => `${c.bookings_count ?? c.total_bookings ?? 0} kali` },
@@ -62,11 +63,18 @@ export default function CustomerList() {
     },
   ];
 
-  const handleEdit = (customer: Customer) => {
-    setEditingCustomer(customer);
-    setErrorMsg('');
-    setFormData({ name: customer.name, email: customer.email || '', phone: customer.phone || '', ktp: customer.ktp || '' });
-    setIsDrawerOpen(true);
+  const handleEdit = async (customer: Customer) => {
+    try {
+      const res = await api.get(`/api/v1/customers/${customer.id}`);
+      const detail = res.data?.data || customer;
+      setEditingCustomer(detail);
+      setErrorMsg('');
+      setFormData({ name: detail.name, email: detail.email || '', phone: detail.phone || '', ktp: detail.ktp || '' });
+      setIsDrawerOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch customer detail', error);
+      setErrorMsg('Gagal memuat data pelanggan.');
+    }
   };
 
   const handleAdd = () => {

@@ -1,23 +1,42 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-const Login = lazy(() => import('./features/auth/Login'));
-const Dashboard = lazy(() => import('./features/dashboard/Dashboard'));
-const RoomBoard = lazy(() => import('./features/rooms/RoomBoard'));
-const RoomTypeList = lazy(() => import('./features/roomTypes/RoomTypeList'));
-const BookingList = lazy(() => import('./features/bookings/BookingList'));
-const NewBooking = lazy(() => import('./features/bookings/NewBooking'));
-const PaymentList = lazy(() => import('./features/payments/PaymentList'));
-const PaymentForm = lazy(() => import('./features/payments/PaymentForm'));
-const HousekeepingBoard = lazy(() => import('./features/housekeeping/HousekeepingBoard'));
-const MaintenanceList = lazy(() => import('./features/maintenance/MaintenanceList'));
-const CustomerList = lazy(() => import('./features/customers/CustomerList'));
-const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
-const UserList = lazy(() => import('./features/users/UserList'));
-const ReportCenter = lazy(() => import('./features/reports/ReportCenter'));
+const loadLogin = () => import('./features/auth/Login');
+const loadDashboard = () => import('./features/dashboard/Dashboard');
+const loadRoomBoard = () => import('./features/rooms/RoomBoard');
+const loadRoomTypeList = () => import('./features/roomTypes/RoomTypeList');
+const loadBookingList = () => import('./features/bookings/BookingList');
+const loadNewBooking = () => import('./features/bookings/NewBooking');
+const loadPaymentList = () => import('./features/payments/PaymentList');
+const loadPaymentForm = () => import('./features/payments/PaymentForm');
+const loadHousekeepingBoard = () => import('./features/housekeeping/HousekeepingBoard');
+const loadMaintenanceList = () => import('./features/maintenance/MaintenanceList');
+const loadCustomerList = () => import('./features/customers/CustomerList');
+const loadSettingsPage = () => import('./features/settings/SettingsPage');
+const loadUserList = () => import('./features/users/UserList');
+const loadReportCenter = () => import('./features/reports/ReportCenter');
+
+const Login = lazy(loadLogin);
+const Dashboard = lazy(loadDashboard);
+const RoomBoard = lazy(loadRoomBoard);
+const RoomTypeList = lazy(loadRoomTypeList);
+const BookingList = lazy(loadBookingList);
+const NewBooking = lazy(loadNewBooking);
+const PaymentList = lazy(loadPaymentList);
+const PaymentForm = lazy(loadPaymentForm);
+const HousekeepingBoard = lazy(loadHousekeepingBoard);
+const MaintenanceList = lazy(loadMaintenanceList);
+const CustomerList = lazy(loadCustomerList);
+const SettingsPage = lazy(loadSettingsPage);
+const UserList = lazy(loadUserList);
+const ReportCenter = lazy(loadReportCenter);
+
 import { AppShell } from './components/layout/AppShell';
 import { Toaster } from './components/ui/Toast';
 import { GlobalConfirmDialog } from './components/ui/ConfirmDialog';
+import { routePreloads } from './lib/routePreloads';
+
+export { routePreloads };
 
 // Guard untuk rute yang hanya boleh diakses Admin (AGENTS.md Bagian 3)
 function AdminOnly({ children }: { children: React.ReactNode }) {

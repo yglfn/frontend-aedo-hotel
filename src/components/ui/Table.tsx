@@ -19,8 +19,29 @@ export interface TableProps<T> {
 export function Table<T>({ columns, data, keyExtractor, emptyMessage = 'Data tidak ditemukan', isLoading }: TableProps<T>) {
   if (isLoading) {
     return (
-      <div className="table-container">
-        <div className="table-loading">Memuat data...</div>
+      <div className="table-container" aria-busy="true" aria-label="Memuat data">
+        <table className="table table-skeleton" aria-hidden="true">
+          <thead>
+            <tr>
+              {columns.map((col) => (
+                <th key={col.key} className={`text-${col.align || 'left'}`}>
+                  {col.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 5 }, (_, row) => (
+              <tr key={row}>
+                {columns.map((col, column) => (
+                  <td key={col.key} className={`text-${col.align || 'left'}`}>
+                    <span className={`skeleton-line skeleton-line-${column % 3}`} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }

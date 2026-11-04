@@ -1,6 +1,6 @@
 /* oxlint-disable react/only-export-components, react/set-state-in-effect */
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../lib/api';
+import { api, cachedGet, clearGetCache } from '../lib/api';
 import type { Role } from '../types';
 
 export interface AuthUser {
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshSettings = async () => {
     try {
-      const res = await api.get('/api/v1/settings');
+      const res = await cachedGet<{ data?: HotelSettings }>('/api/v1/settings');
       if (res.data?.data) {
         setHotelSettings({
           hotel_name: res.data.data.hotel_name || 'Aedo Hotel Syariah',
@@ -101,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await api.post('/api/v1/auth/logout');
     } catch {}
+    clearGetCache();
     setUser(null);
     window.location.href = '/login';
   };

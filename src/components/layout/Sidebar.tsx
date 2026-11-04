@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck, BedDouble } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { confirmDialog } from '../ui/ConfirmDialog';
+import { routePreloads } from '../../lib/routePreloads';
 import './Sidebar.css';
 
 export function Sidebar() {
@@ -28,9 +29,9 @@ export function Sidebar() {
     {
       label: 'Menu Utama',
       items: [
-        { icon: <Home size={18} />, label: 'Dashboard', path: '/dashboard', show: true },
-        { icon: <Calendar size={18} />, label: 'Check-In / Out', path: '/reservations', show: true },
-        { icon: <CheckSquare size={18} />, label: 'Kamar', path: '/rooms', show: true },
+        { icon: <Home size={18} />, label: 'Dashboard', path: '/dashboard', show: true, preload: routePreloads['/dashboard'] },
+        { icon: <Calendar size={18} />, label: 'Check-In / Out', path: '/reservations', show: true, preload: routePreloads['/reservations'] },
+        { icon: <CheckSquare size={18} />, label: 'Kamar', path: '/rooms', show: true, preload: routePreloads['/rooms'] },
         { icon: <UserCheck size={18} />, label: 'Pelanggan', path: '/customers', show: true },
       ],
     },
@@ -74,6 +75,8 @@ export function Sidebar() {
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+                onMouseEnter={() => routePreloads[item.path]?.()}
+                onFocus={() => routePreloads[item.path]?.()}
               >
                 <span className="sidebar-item-icon">{item.icon}</span>
                 <span className="sidebar-item-label">{item.label}</span>
