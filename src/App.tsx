@@ -1,19 +1,20 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Login from './features/auth/Login';
-import Dashboard from './features/dashboard/Dashboard';
-import RoomBoard from './features/rooms/RoomBoard';
-import RoomTypeList from './features/roomTypes/RoomTypeList';
-import BookingList from './features/bookings/BookingList';
-import NewBooking from './features/bookings/NewBooking';
-import PaymentList from './features/payments/PaymentList';
-import PaymentForm from './features/payments/PaymentForm';
-import HousekeepingBoard from './features/housekeeping/HousekeepingBoard';
-import MaintenanceList from './features/maintenance/MaintenanceList';
-import CustomerList from './features/customers/CustomerList';
-import SettingsPage from './features/settings/SettingsPage';
-import UserList from './features/users/UserList';
-import ReportCenter from './features/reports/ReportCenter';
+const Login = lazy(() => import('./features/auth/Login'));
+const Dashboard = lazy(() => import('./features/dashboard/Dashboard'));
+const RoomBoard = lazy(() => import('./features/rooms/RoomBoard'));
+const RoomTypeList = lazy(() => import('./features/roomTypes/RoomTypeList'));
+const BookingList = lazy(() => import('./features/bookings/BookingList'));
+const NewBooking = lazy(() => import('./features/bookings/NewBooking'));
+const PaymentList = lazy(() => import('./features/payments/PaymentList'));
+const PaymentForm = lazy(() => import('./features/payments/PaymentForm'));
+const HousekeepingBoard = lazy(() => import('./features/housekeeping/HousekeepingBoard'));
+const MaintenanceList = lazy(() => import('./features/maintenance/MaintenanceList'));
+const CustomerList = lazy(() => import('./features/customers/CustomerList'));
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
+const UserList = lazy(() => import('./features/users/UserList'));
+const ReportCenter = lazy(() => import('./features/reports/ReportCenter'));
 import { AppShell } from './components/layout/AppShell';
 import { Toaster } from './components/ui/Toast';
 import { GlobalConfirmDialog } from './components/ui/ConfirmDialog';
@@ -54,7 +55,8 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   return (
-    <Routes>
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Memuat...</div>}>
+      <Routes>
       <Route path="/login" element={<Login />} />
 
       {/* Rute Operasional (Bisa diakses Admin & Pegawai) */}
@@ -75,8 +77,9 @@ function AppRoutes() {
       <Route path="/settings" element={<AdminOnly><AppShell><SettingsPage /></AppShell></AdminOnly>} />
       
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 

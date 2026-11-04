@@ -65,7 +65,7 @@ export const formatDateShort = (dateString: string): string => {
   try {
     const date = parseISO(dateString);
     return format(date, 'd MMM yyyy', { locale: id });
-  } catch (e) {
+  } catch {
     return dateString;
   }
 };
@@ -79,7 +79,7 @@ export const formatDateLong = (dateString: string): string => {
   try {
     const date = parseISO(dateString);
     return format(date, 'EEEE, d MMMM yyyy', { locale: id });
-  } catch (e) {
+  } catch {
     return dateString;
   }
 };

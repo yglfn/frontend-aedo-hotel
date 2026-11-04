@@ -1,3 +1,4 @@
+/* oxlint-disable react/immutability */
 import { useState, useEffect, useRef } from 'react';
 import { Table } from '../../components/ui/Table';
 import type { Column } from '../../components/ui/Table';

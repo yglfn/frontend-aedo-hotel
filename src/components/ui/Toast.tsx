@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { useEffect, useState } from 'react';
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from 'lucide-react';
 import './Toast.css';

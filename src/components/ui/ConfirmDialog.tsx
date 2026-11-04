@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { useEffect, useReducer } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';

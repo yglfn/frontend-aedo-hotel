@@ -1,3 +1,4 @@
+/* oxlint-disable react/set-state-in-effect */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';

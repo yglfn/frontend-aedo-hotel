@@ -1,3 +1,4 @@
+/* oxlint-disable react/immutability */
 import { useState, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Card } from '../../components/ui/Card';

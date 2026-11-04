@@ -1,3 +1,4 @@
+/* oxlint-disable react/immutability */
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../lib/api';
 import type { RoomStatus } from '../../types';

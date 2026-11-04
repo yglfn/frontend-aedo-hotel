@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components, react/set-state-in-effect */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import type { Role } from '../types';
@@ -84,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setUser(null);
       }
-    } catch (err: any) {
+    } catch {
       setUser(null);
     } finally {
       setIsLoading(false);

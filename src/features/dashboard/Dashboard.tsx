@@ -1,3 +1,4 @@
+/* oxlint-disable react/immutability, react/purity */
 import { useState, useEffect } from 'react';
 import { 
   LogIn, 

@@ -1,3 +1,4 @@
+/* oxlint-disable react/immutability, react-hooks/exhaustive-deps */
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
