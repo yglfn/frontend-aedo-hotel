@@ -22,7 +22,7 @@ const ROUTE_LABEL: Record<string, string> = {
 };
 
 export function Topbar() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { pathname } = useLocation();
 
   // Cocokkan rute terpanjang lebih dulu supaya /payments/new tidak terbaca sebagai /payments
@@ -41,7 +41,7 @@ export function Topbar() {
         </nav>
       </div>
       <div className="topbar-right">
-        <ShiftPanel />
+        {!isAdmin && <ShiftPanel />}
         <button className="topbar-icon-btn" aria-label="Notifikasi">
           <BellIcon size={20} />
         </button>

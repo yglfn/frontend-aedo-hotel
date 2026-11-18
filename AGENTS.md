@@ -94,7 +94,7 @@ Laporan menuntut hal-hal ini tetapi belum ada di skema:
 
 **Kolom tambahan pada tabel yang ada:**
 - `payments`: `shift_id` (nullable FK).
-- `settings`: `min_dp_percentage`, `auto_verify_transfers`, `auto_verify_max_amount`.
+- `settings`: `min_dp_percentage`, `payment_verification_enabled`.
 - `rooms`, `room_types`: `deleted_at` (SoftDeletes). Data master tidak boleh benar-benar dihapus bila sudah dipakai transaksi. `users` dan `services` cukup memakai `is_active`.
 
 ### 4.3 Keputusan desain data
@@ -150,7 +150,7 @@ Laporan menuntut hal-hal ini tetapi belum ada di skema:
 Fitur payment gateway (Midtrans/Snap, webhook, scheduler penanda `expired`) **sudah dihentikan**. Jangan menambah kembali lapisan provider apa pun: tidak ada `app/Services/PaymentGateway/`, tidak ada endpoint `/payments/gateway`, `/payments/{id}/sync`, `/webhooks/payment-gateway`, `/payment-result`, tidak ada tabel `payment_gateway_logs`, dan tidak ada kolom `provider` / `gateway_*` / `expires_at` di `payments`.
 
 - Metode bayar yang diakui: `cash`, `transfer`, `qris`. Ketiganya **dicatat manual oleh staf** lewat `POST /bookings/{id}/payments`.
-- Alur status: tunai → langsung `verified`; transfer/QRIS → `pending` lalu `verified` setelah admin menilai bukti, atau `failed` bila ditolak. Verifikasi otomatis dimungkinkan bila bukti + nomor referensi lengkap (lihat `settings.auto_verify_*`).
+- Alur status: tunai → langsung `verified`; transfer/QRIS → `pending` lalu `verified` setelah admin memverifikasi, atau `failed` bila ditolak. Bila `settings.payment_verification_enabled = false`, transfer/QRIS langsung `verified` saat dicatat tanpa upload bukti (tercatat di audit sebagai `payment.auto_verified`).
 - Tidak ada lagi status `expired`: pembayaran yang tidak selesai ditolak/dibatalkan admin (`failed`), bukan kedaluwarsa otomatis oleh cron.
 - Uang yang diterima di luar sistem (mis. tamu transfer langsung ke rekening) tetap harus menjadi satu baris `payments` agar invoice dan laporan akurat; tidak ada jalur "lunas" tanpa baris pembayaran.
 - Reservasi Traveloka: **[TENTUKAN]** bagaimana pembayarannya dicatat (dibayar ke hotel oleh Traveloka? nilai bersih atau kotor?) dan apakah perlu metode pembayaran khusus. Sampai ada keputusan, `source = traveloka` hanya menandai asal reservasi tanpa aturan pembayaran khusus.

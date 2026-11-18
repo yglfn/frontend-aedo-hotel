@@ -7,7 +7,6 @@ import { Button } from '../../components/ui/Button';
 import { toast } from '../../components/ui/Toast';
 import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import { api } from '../../lib/api';
-import { formatIDR } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
 import './SettingsPage.css';
 
@@ -19,8 +18,7 @@ interface HotelSettings {
   default_check_out: string;
   tax_percentage: string;
   min_dp_percentage: string;
-  auto_verify_transfers: boolean;
-  auto_verify_max_amount: string;
+  payment_verification_enabled: boolean;
 }
 
 const defaultSettings: HotelSettings = {
@@ -31,8 +29,7 @@ const defaultSettings: HotelSettings = {
   default_check_out: '12:00',
   tax_percentage: '11.00',
   min_dp_percentage: '0',
-  auto_verify_transfers: true,
-  auto_verify_max_amount: '0',
+  payment_verification_enabled: true,
 };
 
 export default function SettingsPage() {
@@ -66,11 +63,7 @@ export default function SettingsPage() {
             data.min_dp_percentage === undefined || data.min_dp_percentage === null
               ? '0'
               : String(data.min_dp_percentage),
-          auto_verify_transfers: data.auto_verify_transfers !== false,
-          auto_verify_max_amount:
-            data.auto_verify_max_amount === undefined || data.auto_verify_max_amount === null
-              ? '0'
-              : String(data.auto_verify_max_amount),
+          payment_verification_enabled: data.payment_verification_enabled !== false,
         };
         setSettings(loaded);
         setSavedSettings(loaded);
@@ -111,7 +104,7 @@ export default function SettingsPage() {
 
     const apply = await confirmDialog({
       title: 'Simpan Pengaturan?',
-      message: 'Nilai baru langsung dipakai sistem: pajak, DP check-in, dan verifikasi otomatis.',
+      message: 'Nilai baru langsung dipakai sistem: pajak, DP check-in, dan verifikasi pembayaran.',
       confirmLabel: 'Simpan & Terapkan',
     });
     if (!apply) return;
@@ -127,8 +120,7 @@ export default function SettingsPage() {
         default_check_out: settings.default_check_out.length === 5 ? `${settings.default_check_out}:00` : settings.default_check_out,
         tax_percentage: parseFloat(settings.tax_percentage) || 0,
         min_dp_percentage: parseFloat(settings.min_dp_percentage) || 0,
-        auto_verify_transfers: settings.auto_verify_transfers,
-        auto_verify_max_amount: parseFloat(settings.auto_verify_max_amount) || 0,
+        payment_verification_enabled: settings.payment_verification_enabled,
       };
       const res = await api.put('/api/v1/settings', payload);
       await refreshSettings();
@@ -151,7 +143,6 @@ export default function SettingsPage() {
      saat admin mengedit, tanpa perlu request tambahan. */
   const pajak = Number(settings.tax_percentage) || 0;
   const dpMinimal = Number(settings.min_dp_percentage) || 0;
-  const plafon = Number(settings.auto_verify_max_amount) || 0;
 
   const ringkasan = [
     { label: 'Nama hotel', value: settings.hotel_name || '-' },
@@ -162,12 +153,8 @@ export default function SettingsPage() {
       value: dpMinimal > 0 ? `${dpMinimal}% dari tagihan` : 'Tidak wajib',
     },
     {
-      label: 'Verifikasi transfer',
-      value: !settings.auto_verify_transfers
-        ? 'Manual (admin)'
-        : plafon > 0
-          ? `Otomatis s/d ${formatIDR(plafon)}`
-          : 'Otomatis, tanpa plafon',
+      label: 'Verifikasi pembayaran',
+      value: settings.payment_verification_enabled ? 'Aktif (menunggu admin)' : 'Nonaktif (langsung lunas)',
     },
   ];
 
@@ -179,7 +166,7 @@ export default function SettingsPage() {
           <p className="text-body-small text-ink-500 mt-1">Konfigurasi operasional dan profil Aedo Hotel Syariah.</p>
         </div>
         {!isEditing && (
-          <Button variant="secondary" onClick={handleStartEdit}>
+          <Button variant="primary" onClick={handleStartEdit}>
             Ubah Pengaturan
           </Button>
         )}
@@ -260,27 +247,18 @@ export default function SettingsPage() {
                   hint="0 = tidak wajib DP. Di atas 0: ini ambang cek-in sekaligus nominal uang muka default di meja."
                   required
                 />
-                <Input
-                  label="Plafon Verifikasi Otomatis (Rp)"
-                  type="number"
-                  min="0"
-                  step="50000"
-                  value={settings.auto_verify_max_amount}
-                  onChange={(e) => setSettings({ ...settings, auto_verify_max_amount: e.target.value })}
-                  hint="0 = tanpa plafon. Di atas nilai ini pembayaran tetap butuh persetujuan admin."
-                  required
-                />
                 <div className="settings-check settings-span">
                   <input
                     type="checkbox"
-                    id="auto_verify_transfers"
-                    checked={settings.auto_verify_transfers}
-                    onChange={(e) => setSettings({ ...settings, auto_verify_transfers: e.target.checked })}
+                    id="payment_verification_enabled"
+                    checked={settings.payment_verification_enabled}
+                    onChange={(e) => setSettings({ ...settings, payment_verification_enabled: e.target.checked })}
                   />
-                  <label className="settings-check-label" htmlFor="auto_verify_transfers">
-                    <span className="text-body-strong">Verifikasi otomatis transfer / QRIS</span>
+                  <label className="settings-check-label" htmlFor="payment_verification_enabled">
+                    <span className="text-body-strong">Verifikasi pembayaran transfer / QRIS</span>
                     <span className="settings-check-hint">
-                      Hanya berlaku bila nomor referensi unik dan bukti pembayaran terunggah.
+                      Aktif: pembayaran non-tunai menunggu persetujuan admin. Nonaktif: langsung dianggap lunas
+                      saat dicatat.
                     </span>
                   </label>
                 </div>
@@ -290,10 +268,10 @@ export default function SettingsPage() {
 
           {isEditing && (
             <div className="settings-actions">
-              <Button type="button" variant="ghost" onClick={handleCancelEdit}>
+              <Button type="button" variant="secondary" onClick={handleCancelEdit}>
                 Batal
               </Button>
-              <Button type="submit" isLoading={isSaving} disabled={!isDirty}>
+              <Button type="submit" variant="primary" isLoading={isSaving} disabled={!isDirty}>
                 Simpan Perubahan
               </Button>
             </div>
@@ -313,7 +291,7 @@ export default function SettingsPage() {
             <p className="settings-summary-note">
               {isEditing
                 ? 'Ringkasan mengikuti isian. Nilai baru berlaku setelah disimpan.'
-                : 'Klik “Ubah Pengaturan” untuk mengedit. Nilai ini dipakai sistem untuk tagihan, DP check-in, dan verifikasi pembayaran.'}
+                : 'Klik “Ubah Pengaturan” untuk mengedit. Nilai ini dipakai sistem untuk tagihan, DP check-in, dan alur verifikasi pembayaran.'}
             </p>
           </Card>
         </aside>

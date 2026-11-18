@@ -95,22 +95,7 @@
   gap: 6px;
 }
 
-.ui-select {
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background-color: var(--surface);
-  font-family: inherit;
-  font-size: 14px;
-  color: var(--ink-900);
-  outline: none;
-  transition: border-color 120ms ease;
-}
-
-.ui-select:focus {
-  border-color: var(--primary-600);
-}
+/* .ui-select dipindah ke styles/patterns.css agar berlaku global di semua halaman. */
 
 /* Room Selection Grid */
 .room-selection-grid {

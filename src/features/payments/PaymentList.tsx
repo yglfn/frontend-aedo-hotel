@@ -20,7 +20,6 @@ interface Payment {
   payment_code: string;
   amount: number;
   payment_method: PaymentMethod;
-  has_proof: boolean;
   status: PaymentStatus;
   created_at: string;
   booking: {
@@ -48,10 +47,6 @@ export default function PaymentList() {
   const [reverseReason, setReverseReason] = useState('');
   const [reverseError, setReverseError] = useState('');
   const [isReversing, setIsReversing] = useState(false);
-  const [proofTarget, setProofTarget] = useState<Payment | null>(null);
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofError, setProofError] = useState('');
-  const [isUploadingProof, setIsUploadingProof] = useState(false);
 
   const requestSeq = useRef(0);
 
@@ -78,7 +73,6 @@ export default function PaymentList() {
         payment_code: p.reference_number || `PAY-${p.id}`,
         amount: Number(p.amount) || 0,
         payment_method: p.method?.value || p.method || 'cash',
-        has_proof: Boolean(p.proof_of_payment),
         status: p.status?.value || p.status || 'verified',
         created_at: p.paid_at || p.created_at || new Date().toISOString(),
         booking: {
@@ -144,47 +138,6 @@ export default function PaymentList() {
     }
   };
 
-  const handleProofChange = (file: File | undefined) => {
-    setProofError('');
-    setProofFile(null);
-    if (!file) return;
-
-    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
-      setProofError('Bukti harus berupa JPEG, JPG, atau PNG.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setProofError('Ukuran bukti maksimal 5 MB.');
-      return;
-    }
-    setProofFile(file);
-  };
-
-  const handleProofUpload = async () => {
-    if (!proofTarget || !proofFile) {
-      setProofError('Pilih file bukti pembayaran terlebih dahulu.');
-      return;
-    }
-
-    setIsUploadingProof(true);
-    setProofError('');
-    try {
-      const formData = new FormData();
-      formData.append('proof', proofFile);
-      await api.post(`/api/v1/payments/${proofTarget.id}/proof`, formData, {
-        headers: { 'Content-Type': undefined },
-      });
-      setProofTarget(null);
-      setProofFile(null);
-      toast.success('Bukti pembayaran berhasil diunggah ulang.');
-      await fetchPayments();
-    } catch (error: any) {
-      setProofError(apiErrorMessage(error, 'Gagal mengunggah ulang bukti pembayaran.'));
-    } finally {
-      setIsUploadingProof(false);
-    }
-  };
-
   const formatMethod = (method: string) => {
     const map: Record<string, string> = {
       'cash': 'Tunai',
@@ -212,14 +165,6 @@ export default function PaymentList() {
       header: 'Aksi',
       align: 'right',
       cell: (p: Payment) => {
-        if (['transfer', 'qris'].includes(String(p.payment_method))) {
-          return (
-            <Button size="sm" variant="secondary" onClick={() => { setProofTarget(p); setProofFile(null); setProofError(''); }}>
-              {p.has_proof ? 'Upload Ulang' : 'Upload Bukti'}
-            </Button>
-          );
-        }
-
         if (p.status === 'pending' && isAdmin) {
           return (
             <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
@@ -350,36 +295,6 @@ export default function PaymentList() {
           {reverseError && (
             <div style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger-fg)', padding: '10px 14px', borderRadius: '6px', fontSize: '13px' }}>
               {reverseError}
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={!!proofTarget}
-        onClose={() => { setProofTarget(null); setProofFile(null); setProofError(''); }}
-        title="Upload Ulang Bukti Pembayaran"
-        maxWidth="460px"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => { setProofTarget(null); setProofFile(null); setProofError(''); }}>Batal</Button>
-            <Button onClick={handleProofUpload} isLoading={isUploadingProof} disabled={!proofFile}>Upload Bukti</Button>
-          </>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <p className="text-body-small">
-            Pilih bukti baru untuk pembayaran <strong>{proofTarget?.booking.booking_code}</strong>. Format JPEG, JPG, atau PNG, maksimal 5 MB.
-          </p>
-          <input
-            type="file"
-            accept="image/jpeg,image/jpg,image/png"
-            onChange={e => handleProofChange(e.target.files?.[0])}
-          />
-          {proofFile && <span className="text-caption">Dipilih: {proofFile.name}</span>}
-          {proofError && (
-            <div style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger-fg)', padding: '10px 14px', borderRadius: '6px', fontSize: '13px' }}>
-              {proofError}
             </div>
           )}
         </div>

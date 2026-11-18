@@ -249,8 +249,8 @@ tidak lagi menerima atau mengembalikan field kredensial apa pun.
 
 Field kendali alur pembayaran: `min_dp_percentage` (ambang uang muka: DP terverifikasi sebesar ini
 membuat booking `confirmed`/boleh check-in, 0 = tidak memaksa; sekaligus **nominal default** saat kasir
-memilih "DP" di meja), `auto_verify_transfers` (verifikasi otomatis transfer/QRIS),
-dan `auto_verify_max_amount` (plafon nilai yang boleh diverifikasi otomatis; 0 = tanpa plafon).
+memilih "DP" di meja) dan `payment_verification_enabled` (saklar verifikasi: `true` = transfer/QRIS
+menunggu persetujuan admin, `false` = langsung dianggap lunas saat dicatat, tanpa upload bukti).
 
 **Response settings:**
 ```json
@@ -263,8 +263,7 @@ dan `auto_verify_max_amount` (plafon nilai yang boleh diverifikasi otomatis; 0 =
     "default_check_out": "12:00:00",
     "tax_percentage": "11.00",
     "min_dp_percentage": "0.00",
-    "auto_verify_transfers": true,
-    "auto_verify_max_amount": "0.00"
+    "payment_verification_enabled": true
   }
 }
 ```
@@ -517,18 +516,18 @@ GET /api/v1/rooms/availability?check_in=2026-11-01&check_out=2026-11-03
 | `GET` | `/api/v1/payments` | Semua | Daftar pembayaran (halaman Pembayaran). Query: `status`, `method`, `type`, `search`, `per_page` (1-100) |
 | `POST` | `/api/v1/bookings/{id}/payments` | Semua* | Catat pembayaran manual |
 | `GET` | `/api/v1/payments/{id}` | Semua | Detail pembayaran |
-| `POST` | `/api/v1/payments/{id}/proof` | Semua | Upload bukti transfer (jpg/png/pdf maks 5 MB) |
-| `PATCH` | `/api/v1/payments/{id}/verify` | **Admin only** | Verifikasi manual (dipakai hanya bila aturan otomatis tidak terpenuhi) |
+| `PATCH` | `/api/v1/payments/{id}/verify` | **Admin only** | Verifikasi pembayaran `pending` (saat `payment_verification_enabled = true`) |
 | `POST` | `/api/v1/payments/{id}/reverse` | **Admin only** | Pembatalan (reversal) pembayaran yang sudah verified, wajib `reason` — kontrol post-audit |
 
-**Aturan verifikasi otomatis (pengganti approval admin):**
+**Aturan verifikasi pembayaran:**
 
 | Jalur | Kapan jadi `verified` |
 |---|---|
 | Tunai | Langsung saat dicatat (kasir + shift = akuntabilitasnya) |
-| Transfer / QRIS manual | Otomatis bila `auto_verify_transfers` aktif **dan** nomor referensi terisi unik (belum pernah dipakai payment lain) **dan** bukti terunggah **dan** nominal tidak membuat verified+pending melebihi tagihan **dan** tidak melewati `auto_verify_max_amount`. Kalau ada satu syarat kurang → tetap `pending`, butuh approve admin |
+| Transfer / QRIS, `payment_verification_enabled = true` | Tetap `pending` sampai admin menekan Verify. Tidak perlu upload bukti. |
+| Transfer / QRIS, `payment_verification_enabled = false` | Langsung `verified` saat dicatat, tanpa upload bukti |
 
-Setiap keputusan otomatis ditulis ke `audit_logs` (`payment.auto_verified`)
+Pelunasan otomatis (saklar nonaktif) ditulis ke `audit_logs` (`payment.auto_verified`)
 dengan `verified_by = NULL` sebagai penanda "sistem". Admin tetap bisa membatalkan lewat `reverse`
 selama tamu belum check-out/batal.
 
@@ -553,17 +552,9 @@ selama tamu belum check-out/batal.
 
 > **Aturan:**
 > - `cash` → langsung `verified` (tidak perlu verifikasi admin)
-> - `transfer` → status `pending`, perlu upload bukti, verifikasi admin
+> - `transfer` / `qris` + verifikasi aktif → `pending`, admin memverifikasi
+> - `transfer` / `qris` + verifikasi nonaktif → langsung `verified` (tanpa bukti)
 > - Tidak bisa melebihi total invoice (`HTTP 422`)
-
-**Upload bukti transfer:**
-```ts
-const formData = new FormData()
-formData.append('proof', file)
-await axios.post(`/api/v1/payments/${paymentId}/proof`, formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-})
-```
 
 ---
 
@@ -713,13 +704,16 @@ Housekeeping task dibuat otomatis
 ### Alur Pembayaran Transfer
 
 ```
+Verifikasi aktif (payment_verification_enabled = true):
 POST /payments  { method: "transfer" }
 ↓ status: pending
-
-POST /payments/{id}/proof  ← upload bukti
-
 PATCH /payments/{id}/verify  ← Admin verifikasi
 ↓ status: verified
+↓ Jika lunas → Invoice: paid
+
+Verifikasi nonaktif (payment_verification_enabled = false):
+POST /payments  { method: "transfer" }
+↓ status: verified (langsung lunas, tanpa bukti)
 ↓ Jika lunas → Invoice: paid
 ```
 

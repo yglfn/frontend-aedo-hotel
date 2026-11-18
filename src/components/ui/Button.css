@@ -29,12 +29,13 @@
 
 .btn-secondary {
   background-color: var(--surface);
-  color: var(--ink-900);
-  border: 1px solid var(--border);
+  color: var(--primary-700);
+  border: 1px solid var(--primary-500);
 }
 .btn-secondary:not(:disabled):hover {
-  background-color: var(--surface-tint);
-  border-color: var(--border-strong);
+  background-color: var(--primary-tint);
+  border-color: var(--primary-600);
+  color: var(--primary-800);
 }
 
 .btn-ghost {

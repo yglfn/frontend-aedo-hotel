@@ -22,6 +22,8 @@ export interface HotelSettings {
   // acuan sebelum melayani tamu (sumber: GET /api/v1/settings, publik).
   default_check_in?: string;
   default_check_out?: string;
+  // Aktif = transfer/QRIS menunggu admin; nonaktif = langsung lunas tanpa bukti.
+  payment_verification_enabled?: boolean;
 }
 
 interface AuthContextType {
@@ -70,6 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           tax_percentage: Number(res.data.data.tax_percentage || 0),
           default_check_in: res.data.data.default_check_in || '',
           default_check_out: res.data.data.default_check_out || '',
+          payment_verification_enabled: res.data.data.payment_verification_enabled !== false,
         });
       }
     } catch (err) {
