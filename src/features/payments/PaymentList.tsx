@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { Tabs } from '../../components/ui/Tabs';
 import { Modal } from '../../components/ui/Modal';
 import { StatusBadge } from '../../components/ui/StatusBadge';
+import { FileDropzone } from '../../components/ui/FileDropzone';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { formatIDR, formatDateShort } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +22,7 @@ interface Payment {
   amount: number;
   payment_method: PaymentMethod;
   status: PaymentStatus;
+  proof_of_payment?: string | null;
   created_at: string;
   booking: {
     booking_code: string;
@@ -48,6 +50,11 @@ export default function PaymentList() {
   const [reverseError, setReverseError] = useState('');
   const [isReversing, setIsReversing] = useState(false);
 
+  const [proofTarget, setProofTarget] = useState<Payment | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofError, setProofError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+
   const requestSeq = useRef(0);
 
   useEffect(() => {
@@ -74,6 +81,7 @@ export default function PaymentList() {
         amount: Number(p.amount) || 0,
         payment_method: p.method?.value || p.method || 'cash',
         status: p.status?.value || p.status || 'verified',
+        proof_of_payment: p.proof_of_payment || null,
         created_at: p.paid_at || p.created_at || new Date().toISOString(),
         booking: {
           booking_code: p.booking?.booking_code || `BK-${p.booking_id || p.id}`,
@@ -138,6 +146,64 @@ export default function PaymentList() {
     }
   };
 
+  const handleProofChange = (file: File | undefined) => {
+    setProofError('');
+    if (!file) {
+      setProofFile(null);
+      return;
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png'];
+    if (!allowedTypes.includes(file.type)) {
+      setProofFile(null);
+      setProofError('Format file harus JPEG, JPG, atau PNG.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setProofFile(null);
+      setProofError('Ukuran file maksimal 5 MB.');
+      return;
+    }
+
+    setProofFile(file);
+  };
+
+  const openProofModal = (payment: Payment) => {
+    setProofTarget(payment);
+    setProofFile(null);
+    setProofError('');
+  };
+
+  const closeProofModal = () => {
+    if (isUploading) return;
+    setProofTarget(null);
+    setProofFile(null);
+    setProofError('');
+  };
+
+  const handleProofUpload = async () => {
+    if (!proofTarget || !proofFile) {
+      setProofError('Pilih file bukti pembayaran terlebih dahulu.');
+      return;
+    }
+
+    setIsUploading(true);
+    setProofError('');
+    try {
+      const formData = new FormData();
+      formData.append('proof', proofFile);
+      await api.post(`/api/v1/payments/${proofTarget.id}/proof`, formData);
+      closeProofModal();
+      await fetchPayments();
+      toast.success('Bukti pembayaran berhasil diunggah.');
+    } catch (error) {
+      setProofError(apiErrorMessage(error, 'Gagal mengunggah bukti pembayaran.'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const formatMethod = (method: string) => {
     const map: Record<string, string> = {
       'cash': 'Tunai',
@@ -165,6 +231,14 @@ export default function PaymentList() {
       header: 'Aksi',
       align: 'right',
       cell: (p: Payment) => {
+        if (p.payment_method !== 'cash' && p.status !== 'failed' && !(p.status === 'pending' && isAdmin) && !(p.status === 'verified' && isAdmin)) {
+          return (
+            <Button size="sm" variant="ghost" onClick={() => openProofModal(p)}>
+              {p.proof_of_payment ? 'Upload Ulang' : 'Upload Bukti'}
+            </Button>
+          );
+        }
+
         if (p.status === 'pending' && isAdmin) {
           return (
             <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
@@ -298,6 +372,29 @@ export default function PaymentList() {
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!proofTarget}
+        onClose={closeProofModal}
+        title={proofTarget?.proof_of_payment ? 'Upload Ulang Bukti Pembayaran' : 'Upload Bukti Pembayaran'}
+        maxWidth="520px"
+        footer={
+          <>
+            <Button variant="ghost" onClick={closeProofModal} disabled={isUploading}>Batal</Button>
+            <Button variant="primary" onClick={handleProofUpload} isLoading={isUploading} loadingText="Mengunggah..." disabled={!proofFile}>
+              Unggah Bukti
+            </Button>
+          </>
+        }
+      >
+        <FileDropzone
+          value={proofFile}
+          onChange={handleProofChange}
+          accept="image/jpeg,image/png"
+          maxSizeMB={5}
+          error={proofError}
+        />
       </Modal>
     </div>
   );
