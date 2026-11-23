@@ -34,6 +34,10 @@ const ReportCenter = lazy(loadReportCenter);
 import { AppShell } from './components/layout/AppShell';
 import { Toaster } from './components/ui/Toast';
 import { GlobalConfirmDialog } from './components/ui/ConfirmDialog';
+import { routePreloads } from './lib/routePreloads';
+
+export { routePreloads };
+
 // Guard untuk rute yang hanya boleh diakses Admin (AGENTS.md Bagian 3)
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAdmin } = useAuth();

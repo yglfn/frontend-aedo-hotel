@@ -1,7 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { User } from 'lucide-react';
+import { Bell as BellIcon, User } from 'lucide-react';
 import { ShiftPanel } from '../../features/shifts/ShiftPanel';
-import { NotificationBell } from '../../features/notifications/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import './Topbar.css';
 
@@ -43,7 +42,9 @@ export function Topbar() {
       </div>
       <div className="topbar-right">
         {!isAdmin && <ShiftPanel />}
-        <NotificationBell />
+        <button className="topbar-icon-btn" aria-label="Notifikasi">
+          <BellIcon size={20} />
+        </button>
         <div className="topbar-user">
           <div className="topbar-avatar" aria-hidden="true">
             <User size={15} />

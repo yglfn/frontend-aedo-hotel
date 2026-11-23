@@ -7,11 +7,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'icon';
   size?: 'default' | 'sm' | 'lg';
   isLoading?: boolean;
-  loadingText?: string;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = '', variant = 'primary', size = 'default', isLoading, loadingText, children, disabled, ...props }, ref) => {
+  ({ className = '', variant = 'primary', size = 'default', isLoading, children, disabled, ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -20,9 +19,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {isLoading && <Loader2 className="btn-spinner" size={16} />}
-        <span className={isLoading && !loadingText ? 'btn-content-hidden' : 'btn-content'}>
-          {isLoading && loadingText ? loadingText : children}
-        </span>
+        <span className={isLoading ? 'btn-content-hidden' : 'btn-content'}>{children}</span>
       </button>
     );
   }
