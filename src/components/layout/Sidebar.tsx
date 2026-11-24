@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck, BedDouble } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -7,6 +8,10 @@ import './Sidebar.css';
 
 export function Sidebar() {
   const { isAdmin, logout, hotelSettings } = useAuth();
+  const [failedPhotoSrc, setFailedPhotoSrc] = useState<string | null>(null);
+  const photoSrc = hotelSettings?.hotel_photo_url && failedPhotoSrc !== hotelSettings.hotel_photo_url
+    ? hotelSettings.hotel_photo_url
+    : '/favicon.svg';
 
   // Keluar menutup sesi secara total, jadi selalu lewat konfirmasi
   const handleLogout = async () => {
@@ -58,7 +63,12 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <span className="sidebar-mark" aria-hidden="true"><BedDouble size={16} strokeWidth={1.75} /></span>
+        <img
+          className="sidebar-mark"
+          src={photoSrc}
+          alt=""
+          onError={() => setFailedPhotoSrc(photoSrc)}
+        />
         <span className="sidebar-lockup">
           <span className="sidebar-logo">{hotelSettings?.hotel_name || 'Aedo Hotel Syariah'}</span>
           {hotelSettings?.hotel_address && (

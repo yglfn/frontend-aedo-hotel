@@ -17,6 +17,7 @@ export interface HotelSettings {
   hotel_address: string;
   hotel_phone?: string;
   hotel_email?: string;
+  hotel_photo_url?: string | null;
   tax_percentage?: number;
   // Jam operasional - ditampilkan apa adanya di halaman login supaya petugas punya
   // acuan sebelum melayani tamu (sumber: GET /api/v1/settings, publik).
@@ -41,6 +42,7 @@ interface AuthContextType {
 const defaultHotelSettings: HotelSettings = {
   hotel_name: 'Aedo Hotel Syariah',
   hotel_address: '',
+  hotel_photo_url: null,
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -69,6 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           hotel_address: res.data.data.hotel_address || '',
           hotel_phone: res.data.data.hotel_phone || '',
           hotel_email: res.data.data.hotel_email || '',
+          hotel_photo_url: res.data.data.hotel_photo_url || null,
           tax_percentage: Number(res.data.data.tax_percentage || 0),
           default_check_in: res.data.data.default_check_in || '',
           default_check_out: res.data.data.default_check_out || '',
@@ -79,6 +82,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Failed to load hotel settings', err);
     }
   };
+
+  useEffect(() => {
+    const hotelName = hotelSettings.hotel_name || 'Aedo Hotel Syariah';
+    document.title = `${hotelName} · Sistem Operasional`;
+
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (favicon) {
+      favicon.href = hotelSettings.hotel_photo_url || '/favicon.svg';
+    }
+  }, [hotelSettings.hotel_name, hotelSettings.hotel_photo_url]);
 
   const refreshUser = async () => {
     try {
