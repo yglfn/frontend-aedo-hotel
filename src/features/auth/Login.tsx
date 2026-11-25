@@ -121,7 +121,7 @@ export default function Login() {
               inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="nama@aedohotel.co.id"
+              placeholder="nama@gmail.co.id"
               autoComplete="email"
               leftIcon={<Mail size={17} strokeWidth={1.8} />}
               aria-describedby={errorMsg ? 'login-error' : undefined}

@@ -149,6 +149,12 @@ export default function CheckInOutCenter() {
   const [serviceNotes, setServiceNotes] = useState('');
   const [serviceError, setServiceError] = useState('');
 
+  // Cancel Booking Modal
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState('');
+
   const navigate = useNavigate();
 
   const requestSeq = useRef(0);
@@ -700,6 +706,57 @@ export default function CheckInOutCenter() {
     }
   };
 
+  // Action: Buka modal konfirmasi pembatalan
+  const openCancelModal = (b: Booking) => {
+    setCancelTarget(b);
+    setCancelReason('');
+    setCancelError('');
+    setIsCancelModalOpen(true);
+  };
+
+  // Action: Konfirmasi & kirim pembatalan ke backend
+  const handleConfirmCancel = async () => {
+    if (!cancelTarget) return;
+
+    const reason = cancelReason.trim();
+    if (reason.length < 5) {
+      setCancelError('Alasan pembatalan minimal 5 karakter.');
+      return;
+    }
+    if (reason.length > 500) {
+      setCancelError('Alasan pembatalan maksimal 500 karakter.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setCancelError('');
+    try {
+      await api.post(`/api/v1/bookings/${cancelTarget.id}/cancel`, {
+        cancel_reason: reason,
+      });
+      setIsCancelModalOpen(false);
+      setCancelTarget(null);
+
+      // Tutup drawer jika sedang terbuka untuk booking yang sama
+      if (selectedBooking?.id === cancelTarget.id) {
+        setIsDrawerOpen(false);
+      }
+
+      await fetchBookings();
+      toast.success(`Reservasi ${cancelTarget.booking_code} berhasil dibatalkan.`, {
+        title: 'Reservasi Dibatalkan',
+      });
+    } catch (error: any) {
+      console.error('Cancel booking error', error);
+      setCancelError(apiErrorMessage(error, 'Gagal membatalkan reservasi.'));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const canCancel = (b: Booking) =>
+    b.status === 'pending' || b.status === 'confirmed';
+
   const columns: Column<Booking>[] = [
     { key: 'code', header: 'Kode Booking', cell: (b) => <span className="text-body-strong">{b.booking_code}</span> },
     { 
@@ -768,14 +825,14 @@ export default function CheckInOutCenter() {
     },
     {
       key: 'action',
-      header: 'Aksi Meja Resepsionis',
+      header: 'Aksi',
       align: 'right',
       cell: (b) => {
         const isReadyForCheckIn = b.status === 'confirmed' || b.status === 'pending';
         const isCheckedIn = b.status === 'checked_in';
 
         return (
-          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
             {isReadyForCheckIn && (
               <Button
                 size="sm"
@@ -1158,18 +1215,32 @@ export default function CheckInOutCenter() {
         title="Detail Reservasi"
         width="680px"
         footer={
-          <div style={{ display: 'flex', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={() => setIsDrawerOpen(false)}>Tutup</Button>
-            {selectedBooking?.status === 'confirmed' && (
-              <Button onClick={() => { setIsDrawerOpen(false); handleOpenCheckInModal(selectedBooking); }}>
-                Check-In Sekarang
-              </Button>
-            )}
-            {selectedBooking?.status === 'checked_in' && (
-              <Button onClick={() => { setIsDrawerOpen(false); handleProcessCheckOut(selectedBooking); }}>
-                Check-Out Sekarang
-              </Button>
-            )}
+          <div style={{ display: 'flex', gap: '8px', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Tombol destruktif di kiri */}
+            <div>
+              {selectedBooking && canCancel(selectedBooking) && (
+                <Button
+                  variant="danger"
+                  onClick={() => { setIsDrawerOpen(false); openCancelModal(selectedBooking); }}
+                >
+                  Batalkan Reservasi
+                </Button>
+              )}
+            </div>
+            {/* Tombol utama di kanan */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button variant="secondary" onClick={() => setIsDrawerOpen(false)}>Tutup</Button>
+              {selectedBooking?.status === 'confirmed' && (
+                <Button onClick={() => { setIsDrawerOpen(false); handleOpenCheckInModal(selectedBooking); }}>
+                  Check-In Sekarang
+                </Button>
+              )}
+              {selectedBooking?.status === 'checked_in' && (
+                <Button onClick={() => { setIsDrawerOpen(false); handleProcessCheckOut(selectedBooking); }}>
+                  Check-Out Sekarang
+                </Button>
+              )}
+            </div>
           </div>
         }
       >
@@ -1567,6 +1638,122 @@ export default function CheckInOutCenter() {
           </div>
         )}
       </Drawer>
+
+      {/* MODAL PEMBATALAN RESERVASI */}
+      {isCancelModalOpen && cancelTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setIsCancelModalOpen(false); }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--surface)',
+              padding: '24px',
+              borderRadius: '12px',
+              width: '460px',
+              maxWidth: '92%',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h2 className="text-h2 mb-2" style={{ color: 'var(--danger-fg, #b91c1c)' }}>
+              Batalkan Reservasi
+            </h2>
+            <p className="text-body-small text-ink-500 mb-4">
+              Anda akan membatalkan reservasi{' '}
+              <strong>{cancelTarget.booking_code}</strong> atas nama{' '}
+              <strong>{cancelTarget.customer?.name}</strong>.
+              Tindakan ini tidak dapat diurungkan.
+            </p>
+
+            {/* Info singkat reservasi */}
+            <div
+              style={{
+                backgroundColor: 'var(--surface-muted)',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span className="text-body-small">Status</span>
+                <StatusBadge type="booking" value={cancelTarget.status} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span className="text-body-small">Check-in</span>
+                <span className="text-body-strong">{formatDateShort(cancelTarget.check_in)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px' }}>
+                <span className="text-body-small">Total Tagihan</span>
+                <span className="money-total-sm">{formatIDR(calculateTotal(cancelTarget))}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-label mb-1" style={{ display: 'block' }}>
+                Alasan Pembatalan <span style={{ color: 'var(--danger-fg, #b91c1c)' }}>*</span>
+              </label>
+              <textarea
+                className="ui-textarea"
+                rows={3}
+                placeholder="Contoh: Tamu membatalkan karena perubahan jadwal perjalanan"
+                value={cancelReason}
+                onChange={(e) => { setCancelReason(e.target.value); setCancelError(''); }}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: cancelError ? '1px solid var(--danger-fg, #b91c1c)' : '1px solid var(--border)',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                {cancelError
+                  ? <span className="form-error" role="alert" style={{ fontSize: '12px' }}>{cancelError}</span>
+                  : <span />
+                }
+                <span className="text-caption" style={{ color: cancelReason.length > 450 ? 'var(--warning-fg)' : 'var(--ink-400)' }}>
+                  {cancelReason.length}/500
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+              <Button
+                variant="ghost"
+                onClick={() => setIsCancelModalOpen(false)}
+                disabled={isProcessing}
+              >
+                Kembali
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmCancel}
+                isLoading={isProcessing}
+                disabled={cancelReason.trim().length < 5}
+              >
+                Ya, Batalkan Reservasi
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
