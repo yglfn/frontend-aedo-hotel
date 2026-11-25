@@ -40,8 +40,16 @@ export default function Login() {
     setErrorMsg('');
 
     try {
-      await api.get('/sanctum/csrf-cookie');
+      try {
+        await api.get('/sanctum/csrf-cookie');
+      } catch {
+        // Abaikan jika csrf-cookie gagal di cross-domain, request login tetap berjalan via API
+      }
       const res = await api.post('/api/v1/auth/login', { email, password });
+
+      if (res.data?.token) {
+        localStorage.setItem('auth_token', res.data.token);
+      }
 
       if (res.data?.user) {
         setUser(res.data.user);
