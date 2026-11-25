@@ -5,6 +5,7 @@ const loadLogin = () => import('./features/auth/Login');
 const loadDashboard = () => import('./features/dashboard/Dashboard');
 const loadRoomBoard = () => import('./features/rooms/RoomBoard');
 const loadRoomTypeList = () => import('./features/roomTypes/RoomTypeList');
+const loadServiceList = () => import('./features/services/ServiceList');
 const loadBookingList = () => import('./features/bookings/BookingList');
 const loadNewBooking = () => import('./features/bookings/NewBooking');
 const loadPaymentList = () => import('./features/payments/PaymentList');
@@ -20,6 +21,7 @@ const Login = lazy(loadLogin);
 const Dashboard = lazy(loadDashboard);
 const RoomBoard = lazy(loadRoomBoard);
 const RoomTypeList = lazy(loadRoomTypeList);
+const ServiceList = lazy(loadServiceList);
 const BookingList = lazy(loadBookingList);
 const NewBooking = lazy(loadNewBooking);
 const PaymentList = lazy(loadPaymentList);
@@ -87,6 +89,7 @@ function AppRoutes() {
       
       {/* Rute Khusus Admin (Berdasarkan AGENTS.md Bagian 3: Pegawai dilarang) */}
       <Route path="/room-types" element={<AdminOnly><AppShell><RoomTypeList /></AppShell></AdminOnly>} />
+      <Route path="/services" element={<AdminOnly><AppShell><ServiceList /></AppShell></AdminOnly>} />
       <Route path="/users" element={<AdminOnly><AppShell><UserList /></AppShell></AdminOnly>} />
       <Route path="/reports" element={<AdminOnly><AppShell><ReportCenter /></AppShell></AdminOnly>} />
       <Route path="/settings" element={<AdminOnly><AppShell><SettingsPage /></AppShell></AdminOnly>} />

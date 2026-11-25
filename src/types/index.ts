@@ -18,3 +18,12 @@ export type HousekeepingTaskStatus = 'pending' | 'in_progress' | 'completed';
 export type MaintenanceStatus = 'reported' | 'in_progress' | 'resolved';
 export type ShiftStatus = 'open' | 'closed';
 export type BookingSource = 'walk_in' | 'phone' | 'traveloka' | 'other';
+
+export interface HotelService {
+  id: number;
+  name: string;
+  price: number | string;
+  unit: string;
+  description?: string | null;
+  is_active: boolean;
+}

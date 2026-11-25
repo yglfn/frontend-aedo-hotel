@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { toast } from '../../components/ui/Toast';
 import { formatIDR } from '../../lib/format';
 import { api } from '../../lib/api';
+import type { HotelService } from '../../types';
 import './NewBooking.css';
 
 interface AvailableRoom {
@@ -71,6 +72,12 @@ export default function NewBooking() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [discountAmount, setDiscountAmount] = useState('0');
   const [notes, setNotes] = useState('');
+  const [services, setServices] = useState<HotelService[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
+  const [serviceQuantities, setServiceQuantities] = useState<Record<number, string>>({});
+  const [isLoadingServices, setIsLoadingServices] = useState(false);
+  const [serviceError, setServiceError] = useState('');
+  const [serviceReloadKey, setServiceReloadKey] = useState(0);
   const [taxPercentage, setTaxPercentage] = useState<number>(11);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -90,6 +97,35 @@ export default function NewBooking() {
     };
     fetchHotelSettings();
   }, []);
+
+  // Daftar layanan aktif hanya dibutuhkan pada langkah ringkasan reservasi.
+  useEffect(() => {
+    if (step !== 3) return;
+    let cancelled = false;
+
+    const fetchServices = async () => {
+      setIsLoadingServices(true);
+      setServiceError('');
+      try {
+        const res = await api.get('/api/v1/services?is_active=1&per_page=100');
+        if (cancelled) return;
+        const raw = res.data?.data;
+        const list = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+        const activeServices = (list as HotelService[]).filter((service) => service.is_active !== false);
+        setServices(activeServices);
+        setSelectedServiceIds((prev) => prev.filter((id) => activeServices.some((service) => service.id === id)));
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to load services', error);
+        setServiceError('Gagal memuat layanan tambahan.');
+      } finally {
+        if (!cancelled) setIsLoadingServices(false);
+      }
+    };
+
+    void fetchServices();
+    return () => { cancelled = true; };
+  }, [step, serviceReloadKey]);
 
   // Debounce pencarian pelanggan saat kata kunci berubah
   useEffect(() => {
@@ -178,6 +214,13 @@ export default function NewBooking() {
     </div>
   );
 
+  const toggleService = (serviceId: number) => {
+    setSelectedServiceIds((prev) => (
+      prev.includes(serviceId) ? prev.filter((id) => id !== serviceId) : [...prev, serviceId]
+    ));
+    setServiceQuantities((prev) => prev[serviceId] ? prev : { ...prev, [serviceId]: '1' });
+  };
+
   const handleSearchRooms = async () => {
     setIsSearchingRooms(true);
     setSearchError('');
@@ -233,6 +276,15 @@ export default function NewBooking() {
       }
     }
 
+    const invalidService = selectedServiceIds.find((id) => {
+      const qty = Number(serviceQuantities[id]);
+      return !Number.isInteger(qty) || qty < 1;
+    });
+    if (invalidService) {
+      setSubmitError('Jumlah setiap layanan tambahan minimal 1.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
     try {
@@ -275,6 +327,10 @@ export default function NewBooking() {
             is_primary: index === 0,
           })),
         notes: notes || undefined,
+        discount_amount: Number(discountAmount) || 0,
+        services: selectedServiceIds.length > 0
+          ? selectedServiceIds.map((id) => ({ service_id: id, qty: Number(serviceQuantities[id]) }))
+          : undefined,
       };
 
       const bookingRes = await api.post('/api/v1/bookings', payload);
@@ -311,7 +367,12 @@ export default function NewBooking() {
     return diffDays || 1;
   };
   const nights = calculateNights();
-  const estSubtotal = totalRoomRatePerNight * nights;
+  const selectedServices = services.filter((service) => selectedServiceIds.includes(service.id));
+  const estServiceSubtotal = selectedServices.reduce(
+    (sum, service) => sum + (Number(service.price) || 0) * (Number(serviceQuantities[service.id]) || 0),
+    0,
+  );
+  const estSubtotal = (totalRoomRatePerNight * nights) + estServiceSubtotal;
   const estDiscount = Number(discountAmount) || 0;
   const taxableAmount = Math.max(0, estSubtotal - estDiscount);
   const estTax = (taxableAmount * taxPercentage) / 100;
@@ -556,6 +617,60 @@ export default function NewBooking() {
               </p>
             </div>
 
+            <h3 className="text-h4 mb-2 border-top pt-4">Layanan Tambahan</h3>
+            <p className="text-body-small text-ink-500 mb-3">Pilih layanan yang ditagihkan bersama reservasi.</p>
+            {isLoadingServices && <p className="text-caption">Memuat layanan...</p>}
+            {serviceError && (
+              <div className="service-load-error">
+                <span>{serviceError}</span>
+                <Button size="sm" variant="ghost" onClick={() => setServiceReloadKey((key) => key + 1)}>Coba Lagi</Button>
+              </div>
+            )}
+            {!isLoadingServices && !serviceError && services.length === 0 && (
+              <p className="text-caption">Belum ada layanan aktif.</p>
+            )}
+            {!isLoadingServices && services.length > 0 && (
+              <div className="service-picker mb-4">
+                {services.map((service) => {
+                  const selected = selectedServiceIds.includes(service.id);
+                  const quantity = Number(serviceQuantities[service.id]) || 0;
+                  return (
+                    <div key={service.id} className={`service-option ${selected ? 'selected' : ''}`}>
+                      <label className="service-option-select">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleService(service.id)}
+                        />
+                        <span className="service-option-main">
+                          <span className="text-body-strong">{service.name}</span>
+                          {service.description && <span className="text-caption">{service.description}</span>}
+                        </span>
+                        <span className="service-option-price">
+                          {formatIDR(Number(service.price) || 0)} <span>/ {service.unit}</span>
+                        </span>
+                      </label>
+                      {selected && (
+                        <div className="service-quantity">
+                          <Input
+                            label="Jumlah"
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={serviceQuantities[service.id] || ''}
+                            onChange={(e) => setServiceQuantities((prev) => ({ ...prev, [service.id]: e.target.value }))}
+                          />
+                          <span className="service-line-total">
+                            Total {formatIDR((Number(service.price) || 0) * quantity)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="summary-section border-top pt-4">
               <h3 className="text-h4 mb-2">Ringkasan Estimasi Tagihan</h3>
               {selectedRooms.map(r => (
@@ -570,8 +685,22 @@ export default function NewBooking() {
               </div>
               <div className="summary-row">
                 <span>Subtotal Kamar ({selectedRooms.length} kamar)</span>
-                <span>{formatIDR(estSubtotal)}</span>
+                <span>{formatIDR(totalRoomRatePerNight * nights)}</span>
               </div>
+              {selectedServices.length > 0 && (
+                <>
+                  {selectedServices.map((service) => (
+                    <div className="summary-row" key={service.id}>
+                      <span>{service.name} · {serviceQuantities[service.id] || 0} {service.unit}</span>
+                      <span>{formatIDR((Number(service.price) || 0) * (Number(serviceQuantities[service.id]) || 0))}</span>
+                    </div>
+                  ))}
+                  <div className="summary-row">
+                    <span>Subtotal layanan</span>
+                    <span>{formatIDR(estServiceSubtotal)}</span>
+                  </div>
+                </>
+              )}
               {estDiscount > 0 && (
                 <div className="summary-row" style={{ color: '#15803d' }}>
                   <span>Diskon</span>

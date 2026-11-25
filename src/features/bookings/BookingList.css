@@ -222,6 +222,44 @@
   color: var(--ink-700);
 }
 
+.detail-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background-color: var(--surface-tint);
+}
+
+.service-form-grid {
+  display: grid;
+  grid-template-columns: 2fr 100px 1.4fr;
+  gap: 12px;
+  align-items: end;
+}
+
+.service-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.service-add-form .form-error {
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 13px;
+}
+
 @media (max-width: 768px) {
   .booking-filters {
     flex-direction: column;
@@ -239,5 +277,8 @@
   .detail-table th,
   .detail-table td {
     padding: 8px;
+  }
+  .service-form-grid {
+    grid-template-columns: 1fr;
   }
 }

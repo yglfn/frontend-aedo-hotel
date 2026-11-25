@@ -7,6 +7,7 @@ export const routePreloads: Record<string, () => Promise<unknown>> = {
   '/maintenance': () => import('../features/maintenance/MaintenanceList'),
   '/customers': () => import('../features/customers/CustomerList'),
   '/room-types': () => import('../features/roomTypes/RoomTypeList'),
+  '/services': () => import('../features/services/ServiceList'),
   '/reports': () => import('../features/reports/ReportCenter'),
   '/users': () => import('../features/users/UserList'),
   '/settings': () => import('../features/settings/SettingsPage'),

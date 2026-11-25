@@ -13,7 +13,7 @@ import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { confirmDialog } from '../../components/ui/ConfirmDialog';
 import { formatIDR, formatDateShort, maskKtp } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
-import type { BookingStatus } from '../../types';
+import type { BookingStatus, HotelService } from '../../types';
 import './BookingList.css';
 
 interface Booking {
@@ -47,6 +47,7 @@ interface Booking {
     quantity?: number;
     price_at_transaction?: number | string;
     total?: number | string;
+    notes?: string | null;
     service?: { id: number; name: string; unit?: string } | null;
   }>;
   payments?: Array<{
@@ -139,9 +140,19 @@ export default function CheckInOutCenter() {
   // Meja bisa menerima uang muka (DP) saja, tidak selalu pelunasan penuh.
   const [payType, setPayType] = useState<'dp' | 'final'>('final');
 
+  // Form layanan tambahan langsung di drawer agar konteks reservasi tetap terlihat.
+  const [isServiceFormOpen, setIsServiceFormOpen] = useState(false);
+  const [serviceOptions, setServiceOptions] = useState<HotelService[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(false);
+  const [serviceId, setServiceId] = useState('');
+  const [serviceQty, setServiceQty] = useState('1');
+  const [serviceNotes, setServiceNotes] = useState('');
+  const [serviceError, setServiceError] = useState('');
+
   const navigate = useNavigate();
 
   const requestSeq = useRef(0);
+  const serviceRequestSeq = useRef(0);
 
   // Status per tab dikirim ke server agar Reservasi lama (di luar halaman pertama) tetap dicari
   const TAB_STATUS: Record<string, string> = {
@@ -299,6 +310,11 @@ export default function CheckInOutCenter() {
     if (type === 'final') setPayAmount(String(sisa));
   };
 
+  const selectedServiceOption = serviceOptions.find((service) => service.id === Number(serviceId));
+  const selectedServiceExistingQty = (selectedBooking?.booking_services || [])
+    .filter((item) => item.service?.id === Number(serviceId))
+    .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
   // Filter list berdasarkan tab aktif
   const filteredList = bookings.filter((b) => {
     const matchesSearch =
@@ -351,10 +367,75 @@ export default function CheckInOutCenter() {
     setSelectedBooking(b);
     setIsDrawerOpen(true);
     setIsDetailLoading(true);
+    setIsServiceFormOpen(false);
+    setServiceError('');
+    setIsLoadingServices(false);
+    serviceRequestSeq.current += 1;
 
     const fresh = await reloadBooking(b);
     if (fresh) setSelectedBooking(fresh);
     setIsDetailLoading(false);
+  };
+
+  const canAddServices = (b: Booking) => ['pending', 'confirmed', 'checked_in'].includes(b.status);
+
+  const openServiceForm = async () => {
+    if (!selectedBooking) return;
+
+    const requestId = ++serviceRequestSeq.current;
+    setIsServiceFormOpen(true);
+    setIsLoadingServices(true);
+    setServiceError('');
+    setServiceId('');
+    setServiceQty('1');
+    setServiceNotes('');
+
+    try {
+      const res = await api.get('/api/v1/services?is_active=1&per_page=100');
+      if (requestId !== serviceRequestSeq.current) return;
+      const raw = res.data?.data;
+      const list = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+      const active = (list as HotelService[]).filter((service) => service.is_active !== false);
+      setServiceOptions(active);
+      if (active.length === 0) setServiceError('Belum ada layanan aktif.');
+    } catch (error) {
+      if (requestId !== serviceRequestSeq.current) return;
+      console.error('Failed to load services', error);
+      setServiceOptions([]);
+      setServiceError('Gagal memuat layanan tambahan.');
+    } finally {
+      if (requestId === serviceRequestSeq.current) setIsLoadingServices(false);
+    }
+  };
+
+  const handleAddService = async () => {
+    if (!selectedBooking) return;
+
+    const id = Number(serviceId);
+    const qty = Number(serviceQty);
+    if (!id || !Number.isInteger(qty) || qty < 1) {
+      setServiceError('Pilih layanan dan isi jumlah minimal 1.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setServiceError('');
+    try {
+      await api.post(`/api/v1/bookings/${selectedBooking.id}/services`, {
+        services: [{ service_id: id, qty, notes: serviceNotes.trim() || undefined }],
+      });
+
+      const fresh = await reloadBooking(selectedBooking);
+      if (fresh) setSelectedBooking(fresh);
+      setIsServiceFormOpen(false);
+      await fetchBookings();
+      toast.success('Layanan tambahan berhasil ditambahkan.');
+    } catch (error: any) {
+      console.error('Failed to add booking service', error);
+      setServiceError(apiErrorMessage(error, 'Gagal menambahkan layanan.'));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   /** Verifikasi pembayaran yang pending, langsung dari layar check-in (admin only) */
@@ -1252,7 +1333,71 @@ export default function CheckInOutCenter() {
             </div>
 
             <div className="detail-section">
-              <h3 className="text-h3">Layanan Tambahan</h3>
+              <div className="detail-section-header">
+                <h3 className="text-h3">Layanan Tambahan</h3>
+                {canAddServices(selectedBooking) && !isServiceFormOpen && (
+                  <Button size="sm" variant="secondary" onClick={openServiceForm}>Tambah Layanan</Button>
+                )}
+              </div>
+
+              {isServiceFormOpen && canAddServices(selectedBooking) && (
+                <div className="service-add-form">
+                  <div className="service-form-grid">
+                    <div className="form-group">
+                      <label className="text-label" htmlFor="booking-service">Layanan</label>
+                      <select
+                        id="booking-service"
+                        className="ui-select"
+                        value={serviceId}
+                        onChange={(e) => setServiceId(e.target.value)}
+                        disabled={isLoadingServices || serviceOptions.length === 0}
+                      >
+                        <option value="">{isLoadingServices ? 'Memuat layanan...' : 'Pilih layanan'}</option>
+                        {serviceOptions.map((service) => (
+                          <option key={service.id} value={service.id}>
+                            {service.name} · {formatIDR(Number(service.price) || 0)} / {service.unit}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Input
+                      label="Jumlah"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={serviceQty}
+                      onChange={(e) => setServiceQty(e.target.value)}
+                      disabled={isLoadingServices}
+                    />
+                    <Input
+                      label="Catatan"
+                      optional
+                      value={serviceNotes}
+                      onChange={(e) => setServiceNotes(e.target.value)}
+                      placeholder="Keterangan layanan"
+                    />
+                  </div>
+                  {selectedServiceOption && (
+                    <p className="text-caption">
+                      Harga {formatIDR(Number(selectedServiceOption.price) || 0)} / {selectedServiceOption.unit}
+                      {selectedServiceExistingQty > 0 ? ` · sudah ada ${selectedServiceExistingQty} pada reservasi ini` : ''}
+                    </p>
+                  )}
+                  {serviceError && <div className="form-error" role="alert">{serviceError}</div>}
+                  <div className="service-form-actions">
+                    <Button size="sm" variant="ghost" onClick={() => setIsServiceFormOpen(false)}>Batal</Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAddService}
+                      isLoading={isProcessing}
+                      disabled={isLoadingServices || !serviceId || Number(serviceQty) < 1}
+                    >
+                      Simpan Layanan
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {(selectedBooking.booking_services || []).length > 0 ? (
                 <table className="detail-table">
                   <thead>
@@ -1261,7 +1406,11 @@ export default function CheckInOutCenter() {
                   <tbody>
                     {(selectedBooking.booking_services || []).map((bs) => (
                       <tr key={bs.id}>
-                        <td className="text-body-strong">{bs.service?.name || 'Layanan terhapus'}</td>
+                        <td>
+                          <span className="text-body-strong">{bs.service?.name || 'Layanan terhapus'}</span>
+                          {bs.service?.unit && <div className="text-caption">per {bs.service.unit}</div>}
+                          {bs.notes && <div className="text-caption">{bs.notes}</div>}
+                        </td>
                         <td>{bs.quantity ?? '-'}</td>
                         <td className="num">{formatIDR(Number(bs.price_at_transaction) || 0)}</td>
                         <td className="num">{formatIDR(Number(bs.total) || 0)}</td>

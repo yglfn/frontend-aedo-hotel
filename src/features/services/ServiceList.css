@@ -1,0 +1,88 @@
+.service-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.service-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.service-filters .input-group {
+  flex: 1;
+}
+
+.service-filters .ui-select {
+  width: 180px;
+  flex: none;
+}
+
+.service-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.service-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.service-description {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background-color: var(--surface);
+  color: var(--ink-900);
+  font: inherit;
+  resize: vertical;
+}
+
+.service-description:focus {
+  border-color: var(--primary-500);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.service-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-700);
+  font-size: 14px;
+}
+
+.service-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-600);
+}
+
+.form-error {
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .service-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .service-filters .ui-select {
+    width: 100%;
+  }
+
+  .service-actions {
+    flex-wrap: wrap;
+  }
+}

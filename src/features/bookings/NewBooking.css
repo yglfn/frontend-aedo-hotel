@@ -226,6 +226,92 @@
   background-color: transparent;
 }
 
+.service-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service-option {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background-color: var(--surface);
+  overflow: hidden;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.service-option.selected {
+  border-color: var(--primary-600);
+  background-color: var(--primary-tint);
+}
+
+.service-option-select {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.service-option-select input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--primary-600);
+}
+
+.service-option-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.service-option-price {
+  flex: none;
+  color: var(--primary-700);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.service-option-price span {
+  color: var(--ink-500);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.service-quantity {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  padding: 0 14px 12px 42px;
+}
+
+.service-quantity .input-group {
+  width: 140px;
+}
+
+.service-line-total {
+  padding-bottom: 10px;
+  color: var(--ink-700);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.service-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 13px;
+}
+
 @media (max-width: 640px) {
   .form-grid {
     grid-template-columns: 1fr;
@@ -237,5 +323,30 @@
 
   .total-row {
     flex-wrap: wrap;
+  }
+
+  .service-option-select {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .service-option-price {
+    width: 100%;
+    padding-left: 28px;
+  }
+
+  .service-quantity {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 14px;
+  }
+
+  .service-quantity .input-group {
+    width: 100%;
+  }
+
+  .service-line-total {
+    padding-bottom: 0;
   }
 }

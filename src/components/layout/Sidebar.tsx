@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck, BedDouble } from 'lucide-react';
+import { Home, Calendar, Users, FileText, CheckSquare, Wrench, Settings, LogOut, Briefcase, BarChart3, UserCheck, BedDouble, ClipboardList } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { confirmDialog } from '../ui/ConfirmDialog';
 import { routePreloads } from '../../lib/routePreloads';
@@ -52,6 +52,7 @@ export function Sidebar() {
       label: 'Administrasi',
       items: [
         { icon: <BedDouble size={18} />, label: 'Tipe Kamar', path: '/room-types', show: isAdmin },
+        { icon: <ClipboardList size={18} />, label: 'Layanan', path: '/services', show: isAdmin },
         { icon: <BarChart3 size={18} />, label: 'Laporan', path: '/reports', show: isAdmin },
         { icon: <Users size={18} />, label: 'Pegawai', path: '/users', show: isAdmin },
       ],
