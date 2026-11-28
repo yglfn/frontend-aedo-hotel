@@ -12,6 +12,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge';
 import { FileDropzone } from '../../components/ui/FileDropzone';
 import { apiErrorMessage, toast } from '../../components/ui/Toast';
 import { formatIDR, formatDateShort } from '../../lib/format';
+import { useAuth } from '../../context/AuthContext';
 import type { PaymentStatus, PaymentMethod } from '../../types';
 import './PaymentList.css';
 
@@ -37,6 +38,7 @@ export default function PaymentList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [isActing, setIsActing] = useState(false);
@@ -180,8 +182,6 @@ export default function PaymentList() {
     setProofError('');
   };
 
-  void openProofModal;
-
   const handleProofUpload = async () => {
     if (!proofTarget || !proofFile) {
       setProofError('Pilih file bukti pembayaran terlebih dahulu.');
@@ -226,6 +226,43 @@ export default function PaymentList() {
     { key: 'amount', header: 'Nominal', cell: (p) => formatIDR(p.amount), align: 'right' },
     { key: 'date', header: 'Waktu', cell: (p) => formatDateShort(p.created_at) },
     { key: 'status', header: 'Status', cell: (p) => <StatusBadge type="payment_status" value={p.status} /> },
+    ...(isAdmin ? [{
+      key: 'action',
+      header: 'Aksi',
+      align: 'right' as const,
+      cell: (p: Payment) => {
+        if (p.payment_method !== 'cash' && p.status !== 'failed' && !(p.status === 'pending' && isAdmin) && !(p.status === 'verified' && isAdmin)) {
+          return (
+            <Button size="sm" variant="ghost" onClick={() => openProofModal(p)}>
+              {p.proof_of_payment ? 'Upload Ulang' : 'Upload Bukti'}
+            </Button>
+          );
+        }
+
+        if (p.status === 'pending' && isAdmin) {
+          return (
+            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+              <Button size="sm" variant="primary" onClick={() => { setConfirmAction({ type: 'verify', payment: p }); setActionError(''); }}>
+                Verifikasi
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => { setConfirmAction({ type: 'reject', payment: p }); setActionError(''); }}>
+                Tolak
+              </Button>
+            </div>
+          );
+        }
+
+        if (p.status === 'verified' && isAdmin) {
+          return (
+            <Button size="sm" variant="ghost" onClick={() => { setReverseTarget(p); setReverseError(''); setReverseReason(''); }}>
+              Batalkan
+            </Button>
+          );
+        }
+
+        return <span className="text-caption">—</span>;
+      },
+    }] : []),
   ];
 
   const tabOptions = [
